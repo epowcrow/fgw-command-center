@@ -266,26 +266,21 @@ function toast(msg,err=false){
 }
 
 // ============================================================
-// API CALLS
+// API CALLS — all Claude calls routed through Apps Script (no CORS)
 // ============================================================
-async function callClaude(prompt, sys=''){
-  if(!CFG.key) throw new Error('Claude API key not set — go to Settings');
-  const body={model:CFG.model,max_tokens:4000,messages:[{role:'user',content:prompt}]};
-  if(sys) body.system=sys;
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.key,'anthropic-version':'2023-06-01'},body:JSON.stringify(body)});
-  if(!r.ok){const e=await r.json(); throw new Error(e.error?.message||'Claude API error');}
-  const d=await r.json(); return d.content[0].text;
+async function callAppsScript(action, body=null){
+  if(!CFG.url) throw new Error('Apps Script URL not set — go to Settings');
+  const url = body ? CFG.url : `${CFG.url}?action=${action}`;
+  const opts = body
+    ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})}
+    : {method:'GET'};
+  const r=await fetch(url,opts);
+  if(!r.ok) throw new Error('Apps Script error: '+r.status);
+  return r.json();
 }
 
 async function fetchAppsScript(action, body=null){
-  if(!CFG.url) return null;
-  try{
-    const url = CFG.url + (body ? '' : `?action=${action}`);
-    const opts = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})} : {method:'GET'};
-    const r=await fetch(url,opts);
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){ return null; }
+  try{ return await callAppsScript(action, body); }catch(e){ return null; }
 }
 
 async function fetchWeather(){
@@ -297,43 +292,25 @@ async function fetchWeather(){
   }catch(e){ return{display:'Red Hook, Brooklyn'}; }
 }
 
-async function generateBriefing(emailData, calData, brainItems=[]){
-  const today = fmtDate();
-  const sys = `You are Eric Powell's personal chief of staff. Direct, no fluff. Return only valid JSON.`;
-  const prompt = `Today is ${today}. Generate Eric's morning briefing.
-
-CONTEXT: Eric owns Flickinger Glassworks (FGW) Red Hook Brooklyn. Also Verrité (lighting brand, Dave Sosnowski), Jump Box Digital (SEO, 1/3 with Ryan Huser + Dean Chiu). Ashley = fiancée, wedding Sept 2026. Joe Bailey = shop manager (payroll Mondays only). Yu-Cheng = office manager/info@ alias. Dante = future foreman. Thursday = WFH protected day.
-
-BUCKET RULES:
-- Bucket 1: Eric most recent FGW respondent OR email to eric@ with no team response OR involves East Hampton, lighting show, Verrité, Jump Box, financials, legal, strategic
-- Bucket 2: Team running it but needs Eric's direction/approval
-- Bucket 3: Handled by Joe/Yucheng, awareness only. Flag back if client escalating or job at risk.
-
-LEAD STAGES: Fresh, Quoted, Negotiating, Approved, In Production, Shipping/Invoicing, Stale (3+ days), Closed
-
-PRIORITY: (1) Time-sensitive/stale/deadline emails (2) What stalls if this slips? (3) Financial urgency (4) Hard deadlines (5) Carry-over (6) Relationship stakes
-
-EMAIL DATA: ${JSON.stringify(emailData||[])}
-CALENDAR TODAY: ${JSON.stringify(calData?.today||[])}
-CALENDAR WEEK: ${JSON.stringify(calData?.week||[])}
-BRAIN DUMP: ${JSON.stringify(brainItems)}
-
-Return ONLY this JSON (no other text):
-{"briefing":"3 plain prose sentences. No labels. First: most urgent. Second: second most important. Third: watch today.","bucket1":[{"id":"b1_1","title":"Bold lead — explanation","meta":"sender/subject/date context","domain":"FGW","est":"15m","urgent":true}],"bucket2":[{"id":"b2_1","title":"Bold lead — explanation","meta":"detail","domain":"FGW","est":"10m"}],"bucket3":[{"id":"b3_1","title":"Status update","meta":"Handled by: Name","domain":"FGW","flag":false}],"leads":[{"name":"Lead Name","stage":"Fresh","owner":"Eric","daysOpen":3,"notes":"status"}],"missedCalls":[{"number":"+1 555-5555","time":"9am","line":"Quote Request"}],"focusBlocks":[{"time":"9:00–9:30am","label":"Email triage","description":"Quick hits","domain":"FGW","duration":30}],"newContacts":[{"name":"Full Name","company":"Co","email":"e@co.com","type":"trade"}]}`;
-
-  const raw = await callClaude(prompt, sys);
-  const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-  return JSON.parse(clean);
+async function generateBriefing(brainItems=[], carryOver=[]){
+  if(!CFG.key) throw new Error('Claude API key not set — go to Settings');
+  const result = await callAppsScript('generateBriefing', {claudeKey:CFG.key, brainItems, carryOver});
+  if(result.error) throw new Error(result.error);
+  return result.briefing;
 }
 
 async function processImage(b64, mime){
-  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:CFG.model,max_tokens:1000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mime,data:b64}},{type:'text',text:'Read all handwritten text. Extract every task/to-do/action item. Return JSON array only: [{"text":"item","domain":"FGW|Wedding|Personal|Verrité|Jump Box|BendFlow","hasDate":bool,"dateText":"date or null","priority":"high|medium|low"}]'}]}]})});
-  const d=await r.json(); return JSON.parse(d.content[0].text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+  if(!CFG.key) throw new Error('Claude API key not set');
+  const result = await callAppsScript('processImage', {claudeKey:CFG.key, b64, mime});
+  if(result.error) throw new Error(result.error);
+  return result.items||[];
 }
 
 async function processDump(text){
-  const raw = await callClaude(`Extract all actionable items from this brain dump. Return JSON array only: [{"text":"action","domain":"FGW|Wedding|Personal|Verrité|Jump Box|BendFlow","hasDate":bool,"dateText":"date or null","priority":"high|medium|low"}]\n\nBrain dump: "${text}"`, 'Extract tasks. Return only valid JSON array.');
-  return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+  if(!CFG.key) throw new Error('Claude API key not set');
+  const result = await callAppsScript('processDump', {claudeKey:CFG.key, text});
+  if(result.error) throw new Error(result.error);
+  return result.items||[];
 }
 
 // ============================================================
@@ -342,23 +319,21 @@ async function processDump(text){
 async function runBriefing(){
   if(S.loading) return;
   if(!CFG.key){ toast('API key not set — go to Settings',true); set({nav:'settings'}); return; }
+  if(!CFG.url){ toast('Apps Script URL not set — go to Settings',true); set({nav:'settings'}); return; }
   set({loading:true});
   try{
     const wx = await fetchWeather();
     set({weather:wx});
 
-    let emailData=[], calData={today:[],week:[]};
-    if(CFG.url){
-      const d = await fetchAppsScript('getBriefingData');
-      if(d){ emailData=d.emails?.emails||[]; calData=d.calendar||calData; if(calData.today) set({calEvents:calData.today}); }
-    }
-
     const brainItems = S.inbox.filter(i=>i.status==='pending').map(i=>i.text);
-    const carryOver = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>'CARRY OVER: '+t.title);
+    const carryOver = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>t.title);
 
-    const briefing = await generateBriefing(emailData, calData, [...brainItems,...carryOver]);
+    const briefing = await generateBriefing(brainItems, carryOver);
     localStorage.setItem('fgw_briefing', JSON.stringify(briefing));
     localStorage.setItem('fgw_briefing_date', new Date().toDateString());
+
+    // Update calendar events from briefing if available
+    if(briefing.calendarToday) set({calEvents: briefing.calendarToday});
 
     // Build tasks from briefing
     const existingDone = new Set(S.tasks.filter(t=>t.done).map(t=>t.title));

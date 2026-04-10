@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FGW Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f7f6f3;--surface:#fff;--s2:#f0efe9;--border:rgba(0,0,0,.08);--borderS:rgba(0,0,0,.15);--text:#1a1917;--muted:#706e68;--hint:#a09e98;--red:#c0392b;--red-bg:#fdf0ef;--amber:#b7770d;--amber-bg:#fdf6e3;--green:#2e7d32;--green-bg:#f0f7f0;--blue:#1565c0;--blue-bg:#e8f0fe;--teal:#00695c;--teal-bg:#e0f2f1;--purple:#5e35b1;--purple-bg:#ede7f6;--gray:#546e7a;--gray-bg:#eceff1;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;--r:8px;--rl:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;min-height:100vh}
+#loading{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:8px}
+.load-logo{font-family:var(--mono);font-size:36px;font-weight:500;letter-spacing:.1em}
+.load-txt{font-size:13px;color:var(--muted);letter-spacing:.05em}
+.load-bar{width:140px;height:2px;background:var(--border);border-radius:2px;margin-top:20px;overflow:hidden}
+.load-fill{height:100%;background:var(--text);border-radius:2px;animation:lf 1.8s ease forwards}
+@keyframes lf{from{width:0}to{width:100%}}
+#shell{display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:50px;position:sticky;top:0;z-index:100}
+.tb-left{display:flex;align-items:center;gap:16px}
+.tb-logo{font-family:var(--mono);font-size:14px;font-weight:500;letter-spacing:.08em}
+.tb-nav{display:flex;gap:3px}
+.nb{padding:4px 11px;border:none;background:transparent;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer;border-radius:var(--r);transition:all .15s}
+.nb:hover{background:var(--s2);color:var(--text)}
+.nb.on{background:var(--text);color:#fff}
+.tb-right{display:flex;align-items:center;gap:10px}
+.wx-pill{font-size:11px;color:var(--muted);background:var(--s2);padding:3px 9px;border-radius:20px}
+.clk{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.run-btn{padding:5px 13px;background:var(--text);color:#fff;border:none;border-radius:var(--r);font-family:var(--font);font-size:12px;cursor:pointer;transition:opacity .15s}
+.run-btn:hover{opacity:.85}
+.run-btn.loading{opacity:.5;cursor:not-allowed}
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:18px 20px 14px}
+.hdr-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
+.hdr-date{font-size:22px;font-weight:500;line-height:1.2}
+.hdr-sub{font-size:13px;color:var(--muted);margin-top:2px}
+.hdr-r{text-align:right}
+.hdr-time{font-family:var(--mono);font-size:18px;font-weight:500}
+.hdr-wx{font-size:12px;color:var(--muted);margin-top:2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}
+.sc{background:var(--s2);border-radius:var(--r);padding:9px 11px;text-align:center}
+.sv{font-size:20px;font-weight:500}
+.sl{font-size:11px;color:var(--muted);margin-top:2px}
+.prog-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px}
+.prog-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:var(--green);border-radius:2px;transition:width .4s ease}
+.main{display:grid;grid-template-columns:1fr 320px;flex:1}
+.left{border-right:1px solid var(--border);overflow-y:auto;min-height:0}
+.right{overflow-y:auto;background:var(--surface)}
+.tab-bar{display:flex;gap:5px;padding:10px 20px 0;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
+.tb{padding:6px 13px;border:none;background:transparent;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer;border-radius:var(--r) var(--r) 0 0;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tb:hover{color:var(--text)}
+.tb.on{color:var(--text);border-bottom-color:var(--text);font-weight:500}
+.sec{padding:14px 20px;border-bottom:1px solid var(--border)}
+.sec:last-child{border-bottom:none}
+.sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.st{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.sc2{font-size:11px;color:var(--hint)}
+.brief-txt{font-size:13px;line-height:1.75;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surface)}
+.tr{display:flex;align-items:flex-start;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)}
+.tr:last-child{border-bottom:none;padding-bottom:0}
+.tr:first-child{padding-top:0}
+.tr.done{opacity:.4}
+.chk{width:16px;height:16px;border:1.5px solid var(--borderS);border-radius:4px;cursor:pointer;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .15s;background:transparent}
+.chk:hover{border-color:var(--text)}
+.chk.ck{background:var(--green);border-color:var(--green)}
+.chk.ck::after{content:'';display:block;width:9px;height:5px;border-left:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(-45deg) translate(1px,-1px)}
+.tb2{flex:1;min-width:0}
+.tt{font-size:13px;font-weight:500;line-height:1.4}
+.tr.done .tt{text-decoration:line-through}
+.tm{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+.tr-r{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.est{font-size:11px;color:var(--hint);font-family:var(--mono)}
+.bdg{display:inline-block;font-size:10px;font-weight:500;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.b-red{background:var(--red-bg);color:var(--red)}
+.b-amb{background:var(--amber-bg);color:var(--amber)}
+.b-grn{background:var(--green-bg);color:var(--green)}
+.b-blu{background:var(--blue-bg);color:var(--blue)}
+.b-tel{background:var(--teal-bg);color:var(--teal)}
+.b-pur{background:var(--purple-bg);color:var(--purple)}
+.b-gry{background:var(--gray-bg);color:var(--gray)}
+.blk-row{display:grid;grid-template-columns:80px 1fr auto;gap:9px;align-items:start;padding:7px 0;border-bottom:1px solid var(--border)}
+.blk-row:last-child{border-bottom:none}
+.bt{font-size:12px;color:var(--muted);font-family:var(--mono);padding-top:1px}
+.bl{font-size:13px;font-weight:500}
+.bs{font-size:12px;color:var(--muted);margin-top:1px}
+.cadd{font-size:11px;padding:3px 8px;border:1px solid var(--borderS);border-radius:var(--r);background:transparent;color:var(--muted);cursor:pointer;white-space:nowrap;transition:all .15s}
+.cadd:hover{background:var(--text);color:#fff;border-color:var(--text)}
+.cadd.added{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.lead-row{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;padding:7px 0;border-bottom:1px solid var(--border)}
+.lead-row:last-child{border-bottom:none}
+.ln{font-size:13px;font-weight:500}
+.lm{font-size:12px;color:var(--muted);margin-top:1px}
+.lr{text-align:right;flex-shrink:0}
+.ld{font-size:11px;color:var(--hint);font-family:var(--mono);margin-top:3px}
+.cr{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.cr:last-child{border-bottom:none}
+.cn{font-family:var(--mono);font-size:13px;font-weight:500}
+.cm{font-size:12px;color:var(--muted);margin-top:1px}
+.cal-row{display:flex;gap:9px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)}
+.cal-row:last-child{border-bottom:none}
+.ct{font-size:11px;color:var(--muted);font-family:var(--mono);min-width:55px;padding-top:1px}
+.ce{font-size:13px;font-weight:500}
+.cs{font-size:12px;color:var(--muted);margin-top:1px}
+.psec{padding:14px 16px;border-bottom:1px solid var(--border)}
+.ptitle{font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
+.dump{width:100%;min-height:90px;border:1px solid var(--border);border-radius:var(--r);padding:9px 11px;font-family:var(--font);font-size:13px;color:var(--text);background:var(--s2);resize:vertical;outline:none;transition:border-color .15s}
+.dump:focus{border-color:var(--borderS);background:var(--surface)}
+.dump::placeholder{color:var(--hint)}
+.ph-row{display:flex;align-items:center;gap:7px;margin-top:7px}
+.ph-btn{display:flex;align-items:center;gap:4px;padding:4px 9px;border:1px dashed var(--borderS);border-radius:var(--r);background:transparent;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer;transition:all .15s}
+.ph-btn:hover{border-color:var(--text);color:var(--text)}
+#ph-inp{display:none}
+.d-acts{display:flex;gap:5px;margin-top:7px}
+.db{flex:1;padding:6px;border:1px solid var(--border);border-radius:var(--r);background:transparent;font-family:var(--font);font-size:12px;cursor:pointer;transition:all .15s;color:var(--muted)}
+.db:hover{background:var(--s2);color:var(--text)}
+.db.pri{background:var(--text);color:#fff;border-color:var(--text)}
+.db.pri:hover{opacity:.85}
+.inbox-row{display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)}
+.inbox-row:last-child{border-bottom:none}
+.ix-t{flex:1;font-size:13px;line-height:1.4}
+.ix-d{font-size:11px;color:var(--muted);margin-top:2px}
+.ix-acts{display:flex;gap:3px;flex-shrink:0}
+.ix-btn{padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:transparent;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s}
+.ix-btn:hover{background:var(--s2)}
+.ix-btn.ok{color:var(--green);border-color:var(--green)}
+.ix-btn.ok:hover{background:var(--green-bg)}
+.add-inp{width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none;margin-bottom:5px}
+.add-inp:focus{border-color:var(--borderS);background:var(--surface)}
+.add-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
+.add-sel,.add-date{padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;background:var(--s2);color:var(--text);outline:none;width:100%}
+.eod-row{padding:7px 0;border-bottom:1px solid var(--border)}
+.eod-row:last-child{border-bottom:none}
+.eod-tt{font-size:13px;font-weight:500;margin-bottom:5px}
+.eod-btns{display:flex;gap:3px}
+.eod-b{flex:1;padding:4px;border:1px solid var(--border);border-radius:var(--r);background:transparent;font-family:var(--font);font-size:11px;cursor:pointer;transition:all .15s;color:var(--muted);text-align:center}
+.eod-b.s-done{background:var(--green-bg);color:var(--green);border-color:var(--green)}
+.eod-b.s-carry{background:var(--amber-bg);color:var(--amber);border-color:var(--amber)}
+.eod-b.s-drop{background:var(--gray-bg);color:var(--gray);border-color:var(--gray)}
+.eod-notes{width:100%;min-height:75px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);resize:vertical;outline:none;margin-top:8px}
+.eod-pulse{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:11px}
+.btn{padding:6px 13px;border-radius:var(--r);font-family:var(--font);font-size:12px;cursor:pointer;transition:all .15s;border:1px solid var(--border);background:transparent;color:var(--muted)}
+.btn:hover{background:var(--s2);color:var(--text)}
+.btn-p{background:var(--text);color:#fff;border-color:var(--text)}
+.btn-p:hover{opacity:.85}
+.btn-row{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap}
+.fb-area{width:100%;min-height:65px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);resize:vertical;outline:none}
+.empty{text-align:center;padding:20px;color:var(--hint);font-size:13px}
+.cust-row{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .15s}
+.cust-row:hover{opacity:.75}
+.cust-row:last-child{border-bottom:none}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0;color:var(--muted);background:var(--s2)}
+.cname{font-size:13px;font-weight:500}
+.cmeta{font-size:12px;color:var(--muted);margin-top:1px}
+.clast{font-size:11px;color:var(--hint);margin-top:2px;font-family:var(--mono)}
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:var(--surface);border-radius:var(--rl);padding:22px;width:360px;max-width:90vw}
+.modal-t{font-size:15px;font-weight:500;margin-bottom:5px}
+.modal-s{font-size:13px;color:var(--muted);margin-bottom:14px}
+.modal-task{background:var(--s2);padding:9px 11px;border-radius:var(--r);font-size:13px;margin-bottom:14px;line-height:1.5}
+.modal-lbl{font-size:12px;color:var(--muted);margin-bottom:4px}
+.modal-inp{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none;margin-bottom:8px}
+.modal-inp:focus{border-color:var(--borderS)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:9px 18px;border-radius:var(--r);font-size:13px;z-index:9999;pointer-events:none;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateX(-50%) translateY(4px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--borderS);border-radius:2px}
+@media(max-width:860px){.main{grid-template-columns:1fr}.right{border-top:1px solid var(--border)}.stats{grid-template-columns:repeat(2,1fr)}}
+.fade{animation:fi .2s ease forwards}
+.settings-wrap{padding:20px 24px;max-width:520px}
+.set-lbl{font-size:13px;font-weight:500;margin-bottom:3px}
+.set-sub{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.set-inp{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none;margin-bottom:6px}
+.set-inp:focus{border-color:var(--borderS);background:var(--surface)}
+.set-block{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid var(--border)}
+.set-block:last-child{border-bottom:none}
+.url-display{font-family:var(--mono);font-size:11px;background:var(--s2);padding:7px 9px;border-radius:var(--r);color:var(--muted);word-break:break-all;margin-top:6px}
+</style>
+</head>
+<body>
+<div id="loading">
+  <div class="load-logo">FGW</div>
+  <div class="load-txt">Command Center</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+<div id="shell" style="display:none"></div>
+
+<script>
+// ============================================================
+// CONFIG — stored in localStorage, set via Settings
+// ============================================================
+const CFG = {
+  get key(){ return localStorage.getItem('fgw_key')||'' },
+  get url(){ return localStorage.getItem('fgw_url')||'' },
+  model: 'claude-sonnet-4-20250514',
+  lat: 40.6782, lon: -74.0060,
+  domainColors: {FGW:'b-blu',Strategic:'b-pur',BendFlow:'b-tel',Verrité:'b-amb','Jump Box':'b-grn',Wedding:'b-red',Personal:'b-gry',Finance:'b-amb',Legal:'b-red',Calls:'b-gry',Ops:'b-tel'},
+  stageColors: {Fresh:'b-grn',Quoted:'b-blu',Negotiating:'b-amb',Approved:'b-tel','In Production':'b-pur','Shipping':'b-blu',Stale:'b-red',Closed:'b-gry'}
+};
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  nav: 'dashboard',
+  tab: 'morning',
+  briefing: null,
+  tasks: JSON.parse(localStorage.getItem('fgw_tasks')||'[]'),
+  inbox: JSON.parse(localStorage.getItem('fgw_inbox')||'[]'),
+  customers: JSON.parse(localStorage.getItem('fgw_customers')||'[]'),
+  feedback: JSON.parse(localStorage.getItem('fgw_feedback')||'[]'),
+  calEvents: [],
+  weather: null,
+  loading: false,
+  dateQueue: [],
+  eodNotes: '',
+  custDetail: null
+};
+
+function save(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+function set(upd){
+  Object.assign(S, upd);
+  if('tasks' in upd) save('fgw_tasks', S.tasks);
+  if('inbox' in upd) save('fgw_inbox', S.inbox);
+  if('customers' in upd) save('fgw_customers', S.customers);
+  if('feedback' in upd) save('fgw_feedback', S.feedback);
+  render();
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function fmtDate(){
+  return new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'});
+}
+function fmtTime(){
+  const n=new Date(); let h=n.getHours(),m=n.getMinutes(); const ap=h>=12?'pm':'am'; h=h%12||12;
+  return `${h}:${m<10?'0':''}${m}${ap}`;
+}
+function badge(domain,type='domain'){
+  const map = type==='domain' ? CFG.domainColors : CFG.stageColors;
+  const cls = map[domain]||'b-gry';
+  return `<span class="bdg ${cls}">${domain}</span>`;
+}
+function initials(n){ if(!n)return'?'; return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+function timeAgo(iso){
+  const d=new Date(iso), diff=Date.now()-d;
+  const mins=Math.floor(diff/60000), hrs=Math.floor(mins/60), days=Math.floor(hrs/24);
+  if(days>0)return`${days}d ago`; if(hrs>0)return`${hrs}h ago`; return`${mins}m ago`;
+}
+function fmtEvtTime(dt){
+  if(!dt)return'All day'; const d=new Date(dt); let h=d.getHours(),m=d.getMinutes(); const ap=h>=12?'pm':'am'; h=h%12||12;
+  return `${h}:${m<10?'0':''}${m}${ap}`;
+}
+function fmtMins(m){ return m>=60?`${(m/60).toFixed(1)}h`:`${m}m`; }
+function estMins(tasks){
+  const map={'5m':5,'10m':10,'15m':15,'20m':20,'30m':30,'45m':45,'60m':60,'90m':90,'2h':120};
+  return tasks.filter(t=>!t.done).reduce((a,t)=>a+(map[t.est]||15),0);
+}
+function toast(msg,err=false){
+  document.querySelectorAll('.toast').forEach(e=>e.remove());
+  const t=document.createElement('div'); t.className='toast';
+  if(err) t.style.background='var(--red)';
+  t.textContent=msg; document.body.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+// ============================================================
+// API CALLS
+// ============================================================
+async function callClaude(prompt, sys=''){
+  if(!CFG.key) throw new Error('Claude API key not set — go to Settings');
+  const body={model:CFG.model,max_tokens:4000,messages:[{role:'user',content:prompt}]};
+  if(sys) body.system=sys;
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.key,'anthropic-version':'2023-06-01'},body:JSON.stringify(body)});
+  if(!r.ok){const e=await r.json(); throw new Error(e.error?.message||'Claude API error');}
+  const d=await r.json(); return d.content[0].text;
+}
+
+async function fetchAppsScript(action, body=null){
+  if(!CFG.url) return null;
+  try{
+    const url = CFG.url + (body ? '' : `?action=${action}`);
+    const opts = body ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})} : {method:'GET'};
+    const r=await fetch(url,opts);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
+async function fetchWeather(){
+  try{
+    const r=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${CFG.lat}&longitude=${CFG.lon}&current=temperature_2m,weathercode&temperature_unit=fahrenheit`);
+    const d=await r.json(); const t=Math.round(d.current.temperature_2m); const c=d.current.weathercode;
+    const w=c<=1?'Clear':c<=3?'Partly cloudy':c<=48?'Foggy':c<=67?'Rain':c<=77?'Snow':'Stormy';
+    return{display:`${t}°F · ${w}`};
+  }catch(e){ return{display:'Red Hook, Brooklyn'}; }
+}
+
+async function generateBriefing(emailData, calData, brainItems=[]){
+  const today = fmtDate();
+  const sys = `You are Eric Powell's personal chief of staff. Direct, no fluff. Return only valid JSON.`;
+  const prompt = `Today is ${today}. Generate Eric's morning briefing.
+
+CONTEXT: Eric owns Flickinger Glassworks (FGW) Red Hook Brooklyn. Also Verrité (lighting brand, Dave Sosnowski), Jump Box Digital (SEO, 1/3 with Ryan Huser + Dean Chiu). Ashley = fiancée, wedding Sept 2026. Joe Bailey = shop manager (payroll Mondays only). Yu-Cheng = office manager/info@ alias. Dante = future foreman. Thursday = WFH protected day.
+
+BUCKET RULES:
+- Bucket 1: Eric most recent FGW respondent OR email to eric@ with no team response OR involves East Hampton, lighting show, Verrité, Jump Box, financials, legal, strategic
+- Bucket 2: Team running it but needs Eric's direction/approval
+- Bucket 3: Handled by Joe/Yucheng, awareness only. Flag back if client escalating or job at risk.
+
+LEAD STAGES: Fresh, Quoted, Negotiating, Approved, In Production, Shipping/Invoicing, Stale (3+ days), Closed
+
+PRIORITY: (1) Time-sensitive/stale/deadline emails (2) What stalls if this slips? (3) Financial urgency (4) Hard deadlines (5) Carry-over (6) Relationship stakes
+
+EMAIL DATA: ${JSON.stringify(emailData||[])}
+CALENDAR TODAY: ${JSON.stringify(calData?.today||[])}
+CALENDAR WEEK: ${JSON.stringify(calData?.week||[])}
+BRAIN DUMP: ${JSON.stringify(brainItems)}
+
+Return ONLY this JSON (no other text):
+{"briefing":"3 plain prose sentences. No labels. First: most urgent. Second: second most important. Third: watch today.","bucket1":[{"id":"b1_1","title":"Bold lead — explanation","meta":"sender/subject/date context","domain":"FGW","est":"15m","urgent":true}],"bucket2":[{"id":"b2_1","title":"Bold lead — explanation","meta":"detail","domain":"FGW","est":"10m"}],"bucket3":[{"id":"b3_1","title":"Status update","meta":"Handled by: Name","domain":"FGW","flag":false}],"leads":[{"name":"Lead Name","stage":"Fresh","owner":"Eric","daysOpen":3,"notes":"status"}],"missedCalls":[{"number":"+1 555-5555","time":"9am","line":"Quote Request"}],"focusBlocks":[{"time":"9:00–9:30am","label":"Email triage","description":"Quick hits","domain":"FGW","duration":30}],"newContacts":[{"name":"Full Name","company":"Co","email":"e@co.com","type":"trade"}]}`;
+
+  const raw = await callClaude(prompt, sys);
+  const clean = raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  return JSON.parse(clean);
+}
+
+async function processImage(b64, mime){
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':CFG.key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:CFG.model,max_tokens:1000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mime,data:b64}},{type:'text',text:'Read all handwritten text. Extract every task/to-do/action item. Return JSON array only: [{"text":"item","domain":"FGW|Wedding|Personal|Verrité|Jump Box|BendFlow","hasDate":bool,"dateText":"date or null","priority":"high|medium|low"}]'}]}]})});
+  const d=await r.json(); return JSON.parse(d.content[0].text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+}
+
+async function processDump(text){
+  const raw = await callClaude(`Extract all actionable items from this brain dump. Return JSON array only: [{"text":"action","domain":"FGW|Wedding|Personal|Verrité|Jump Box|BendFlow","hasDate":bool,"dateText":"date or null","priority":"high|medium|low"}]\n\nBrain dump: "${text}"`, 'Extract tasks. Return only valid JSON array.');
+  return JSON.parse(raw.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim());
+}
+
+// ============================================================
+// BRIEFING RUNNER
+// ============================================================
+async function runBriefing(){
+  if(S.loading) return;
+  if(!CFG.key){ toast('API key not set — go to Settings',true); set({nav:'settings'}); return; }
+  set({loading:true});
+  try{
+    const wx = await fetchWeather();
+    set({weather:wx});
+
+    let emailData=[], calData={today:[],week:[]};
+    if(CFG.url){
+      const d = await fetchAppsScript('getBriefingData');
+      if(d){ emailData=d.emails?.emails||[]; calData=d.calendar||calData; if(calData.today) set({calEvents:calData.today}); }
+    }
+
+    const brainItems = S.inbox.filter(i=>i.status==='pending').map(i=>i.text);
+    const carryOver = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>'CARRY OVER: '+t.title);
+
+    const briefing = await generateBriefing(emailData, calData, [...brainItems,...carryOver]);
+    localStorage.setItem('fgw_briefing', JSON.stringify(briefing));
+    localStorage.setItem('fgw_briefing_date', new Date().toDateString());
+
+    // Build tasks from briefing
+    const existingDone = new Set(S.tasks.filter(t=>t.done).map(t=>t.title));
+    const newTasks = [
+      ...(briefing.bucket1||[]).map(t=>({...t,bucket:1,done:existingDone.has(t.title),eodStatus:null})),
+      ...(briefing.bucket2||[]).map(t=>({...t,bucket:2,done:existingDone.has(t.title),eodStatus:null})),
+      ...(briefing.bucket3||[]).map(t=>({...t,bucket:3,done:existingDone.has(t.title),eodStatus:null})),
+    ];
+    const prevCarry = S.tasks.filter(t=>t.eodStatus==='carry'&&!newTasks.find(n=>n.title===t.title)).map(t=>({...t,eodStatus:null,meta:'(carried over) '+(t.meta||'')}));
+
+    // Auto-add new contacts
+    if(briefing.newContacts?.length){
+      const customers=[...S.customers];
+      briefing.newContacts.forEach(c=>{
+        if(!customers.find(x=>x.email===c.email)) customers.push({id:'c_'+Date.now()+'_'+Math.random().toString(36).slice(2),created:new Date().toISOString(),lastContact:new Date().toISOString(),calls:[],notes:[],...c});
+      });
+      save('fgw_customers',customers);
+      S.customers=customers;
+    }
+
+    set({briefing, tasks:[...prevCarry,...newTasks], loading:false, tab:'morning'});
+  }catch(e){
+    set({loading:false});
+    toast('Briefing error: '+e.message, true);
+  }
+}
+
+// ============================================================
+// TASK ACTIONS
+// ============================================================
+function toggleTask(id){ set({tasks:S.tasks.map(t=>t.id===id?{...t,done:!t.done}:t)}); }
+function setEOD(id,st){ set({tasks:S.tasks.map(t=>t.id===id?{...t,eodStatus:st,done:st==='done'}:t)}); }
+function addInbox(item){ set({inbox:[...S.inbox,{id:'i_'+Date.now(),status:'pending',source:'manual',created:new Date().toISOString(),...item}]}); }
+function approveInbox(id){
+  const item=S.inbox.find(i=>i.id===id); if(!item)return;
+  if(!item.date){ set({dateQueue:[...S.dateQueue,item]}); return false; }
+  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:item.text,meta:`Added from ${item.source||'inbox'}`,domain:item.domain||'FGW',est:'15m',done:false,eodStatus:null,date:item.date}];
+  const inbox=S.inbox.map(i=>i.id===id?{...i,status:'approved'}:i);
+  set({tasks,inbox}); return true;
+}
+function resolveDateQ(id,date,time){
+  const item=S.dateQueue.find(i=>i.id===id); if(!item)return;
+  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:item.text,meta:`Due ${date}${time?' at '+time:''}`,domain:item.domain||'FGW',est:'15m',done:false,eodStatus:null,date,time}];
+  set({tasks,dateQueue:S.dateQueue.filter(i=>i.id!==id),inbox:S.inbox.map(i=>i.id===item.id?{...i,status:'approved',date,time}:i)});
+}
+function saveEOD(){
+  const notes=document.getElementById('eod-notes-val')?.value||'';
+  const carry=S.tasks.filter(t=>t.eodStatus==='carry').map(t=>t.title);
+  set({eodNotes:notes,tasks:S.tasks.filter(t=>t.eodStatus!=='done'&&t.eodStatus!=='drop').map(t=>({...t,eodStatus:null}))});
+  toast(`Day saved. ${carry.length} tasks carrying over.`);
+}
+
+// ============================================================
+// RENDER FUNCTIONS
+// ============================================================
+function renderTopBar(){
+  return `<div class="topbar">
+    <div class="tb-left">
+      <div class="tb-logo">FGW</div>
+      <nav class="tb-nav">
+        <button class="nb ${S.nav==='dashboard'?'on':''}" onclick="setNav('dashboard')">Dashboard</button>
+        <button class="nb ${S.nav==='customers'?'on':''}" onclick="setNav('customers')">Customers</button>
+        <button class="nb ${S.nav==='settings'?'on':''}" onclick="setNav('settings')">Settings</button>
+      </nav>
+    </div>
+    <div class="tb-right">
+      <div class="wx-pill" id="wx-display">${S.weather?.display||'Red Hook'}</div>
+      <div class="clk" id="clk-display">${fmtTime()}</div>
+      <button class="run-btn ${S.loading?'loading':''}" onclick="runBriefing()">${S.loading?'Loading...':'Run Briefing'}</button>
+    </div>
+  </div>`;
+}
+
+function renderHeader(){
+  const done=S.tasks.filter(t=>t.done).length, total=S.tasks.length, rem=total-done;
+  const pct=total>0?Math.round(done/total*100):0;
+  const stale=(S.briefing?.leads||[]).filter(l=>l.stage==='Stale').length;
+  const emins=estMins(S.tasks);
+  return `<div class="hdr">
+    <div class="hdr-top">
+      <div><div class="hdr-date">${fmtDate()}</div><div class="hdr-sub">Flickinger Glassworks · Red Hook, Brooklyn</div></div>
+      <div class="hdr-r"><div class="hdr-time" id="hdr-time">${fmtTime()}</div><div class="hdr-wx">${S.weather?.display||'Red Hook, Brooklyn'}</div></div>
+    </div>
+    <div class="stats">
+      <div class="sc"><div class="sv">${done}</div><div class="sl">done</div></div>
+      <div class="sc"><div class="sv">${rem}</div><div class="sl">remaining</div></div>
+      <div class="sc"><div class="sv">${fmtMins(emins)}</div><div class="sl">est. time left</div></div>
+      <div class="sc"><div class="sv" style="${stale>0?'color:var(--red)':''}">${stale}</div><div class="sl">stale leads</div></div>
+    </div>
+    <div class="prog-lbl"><span>${done} of ${total} tasks complete</span><span>${pct}%</span></div>
+    <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+function renderTask(t){
+  return `<div class="tr ${t.done?'done':''} fade" data-id="${t.id}">
+    <div class="chk ${t.done?'ck':''}" onclick="toggleTask('${t.id}')"></div>
+    <div class="tb2"><div class="tt">${t.title}</div>${t.meta?`<div class="tm">${t.meta}</div>`:''}</div>
+    <div class="tr-r"><span class="est">${t.est||'15m'}</span>${badge(t.domain||'FGW')}</div>
+  </div>`;
+}
+
+function renderBucket(title, tasks){
+  const rem=tasks.filter(t=>!t.done).length;
+  return `<div class="sec">
+    <div class="sh"><div class="st">${title}</div><div class="sc2">${rem} remaining</div></div>
+    ${tasks.length?tasks.map(renderTask).join(''):'<div class="empty">Nothing here</div>'}
+  </div>`;
+}
+
+function renderFocusBlocks(blocks){
+  if(!blocks?.length)return'';
+  return `<div class="sec"><div class="sh"><div class="st">Today's Focus Blocks</div></div>
+    ${blocks.map(b=>`<div class="blk-row">
+      <div class="bt">${b.time}</div>
+      <div><div class="bl">${b.label}</div>${b.description?`<div class="bs">${b.description}</div>`:''}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+        ${badge(b.domain||'FGW')}
+        <button class="cadd" onclick="addBlock(this,'${encodeURIComponent(JSON.stringify(b))}')">+ Calendar</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderLeads(leads){
+  if(!leads?.length)return'';
+  return `<div class="sec"><div class="sh"><div class="st">Lead Tracker</div></div>
+    ${leads.map(l=>`<div class="lead-row">
+      <div><div class="ln">${l.name}</div><div class="lm">${l.notes||''}</div></div>
+      <div class="lr">${badge(l.stage,'stage')}<div class="ld">${l.owner} · ${l.daysOpen}d</div></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderCalls(calls){
+  if(!calls?.length)return'';
+  return `<div class="sec"><div class="sh"><div class="st">Missed Calls</div></div>
+    ${calls.map(c=>`<div class="cr">
+      <div><div class="cn">${c.number}</div><div class="cm">${c.line||''} · ${c.time||''}</div></div>
+      <span class="bdg b-red">callback</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderCalEvents(){
+  if(!S.calEvents?.length)return'';
+  return `<div class="sec"><div class="sh"><div class="st">Calendar Today</div></div>
+    ${S.calEvents.map(e=>`<div class="cal-row">
+      <div class="ct">${fmtEvtTime(e.start?.dateTime)}</div>
+      <div><div class="ce">${e.title||e.summary||''}</div>${e.location?`<div class="cs">${e.location}</div>`:''}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderEmptyState(){
+  return `<div class="sec"><div class="empty" style="padding:40px">
+    <div style="font-size:22px;margin-bottom:8px">☀</div>
+    <div style="font-weight:500;margin-bottom:4px">Ready for your briefing</div>
+    <div>Click "Run Briefing" to load today's report</div>
+  </div></div>`;
+}
+
+function renderMorningTab(){
+  const b=S.briefing;
+  if(!b) return renderEmptyState();
+  const b1=S.tasks.filter(t=>t.bucket===1), b2=S.tasks.filter(t=>t.bucket===2), b3=S.tasks.filter(t=>t.bucket===3);
+  return `
+    ${b.briefing?`<div class="brief-txt">${b.briefing}</div>`:''}
+    ${renderBucket('Bucket 1 — Yours to Own',b1)}
+    ${renderBucket('Bucket 2 — Weigh In Needed',b2)}
+    ${renderBucket('Operations — Delegate or Verify',b3)}
+    ${renderFocusBlocks(b.focusBlocks)}
+    ${renderLeads(b.leads)}
+    ${renderCalls(b.missedCalls)}
+    ${renderCalEvents()}
+  `;
+}
+
+function renderEODTab(){
+  const tasks=S.tasks;
+  const done=tasks.filter(t=>t.eodStatus==='done').length;
+  const carry=tasks.filter(t=>t.eodStatus==='carry').length;
+  const drop=tasks.filter(t=>t.eodStatus==='drop').length;
+  const pct=tasks.length>0?Math.round(done/tasks.length*100):0;
+  return `
+    <div class="sec"><div class="sh"><div class="st">Mark Today's Tasks</div></div>
+      ${tasks.length?tasks.map(t=>`<div class="eod-row">
+        <div class="eod-tt">${t.title}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:5px">${t.meta||''}</div>
+        <div class="eod-btns">
+          <button class="eod-b ${t.eodStatus==='done'?'s-done':''}" onclick="setEOD('${t.id}','done')">Done</button>
+          <button class="eod-b ${t.eodStatus==='carry'?'s-carry':''}" onclick="setEOD('${t.id}','carry')">Carry over</button>
+          <button class="eod-b ${t.eodStatus==='drop'?'s-drop':''}" onclick="setEOD('${t.id}','drop')">Drop</button>
+        </div>
+      </div>`).join(''):'<div class="empty">No tasks to review</div>'}
+    </div>
+    <div class="sec"><div class="sh"><div class="st">Notes for Tomorrow</div></div>
+      <textarea class="eod-notes" id="eod-notes-val" placeholder="What happened today? Decisions made, things that changed...">${S.eodNotes||''}</textarea>
+    </div>
+    <div class="sec">
+      <div class="btn-row">
+        <button class="btn btn-p" onclick="saveEOD()">Save + prep tomorrow</button>
+        <button class="btn" onclick="toast('Carry-over: '+S.tasks.filter(t=>t.eodStatus==='carry').length+' tasks. Run briefing tomorrow.')">Preview tomorrow</button>
+      </div>
+    </div>
+    <div class="sec"><div class="sh"><div class="st">Today's Pulse</div></div>
+      <div class="eod-pulse">
+        <div class="sc"><div class="sv" style="color:var(--green)">${done}</div><div class="sl">done</div></div>
+        <div class="sc"><div class="sv" style="color:var(--amber)">${carry}</div><div class="sl">carry over</div></div>
+        <div class="sc"><div class="sv" style="color:var(--gray)">${drop}</div><div class="sl">dropped</div></div>
+        <div class="sc"><div class="sv">${pct}%</div><div class="sl">complete</div></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderRightPanel(){
+  const pending=S.inbox.filter(i=>i.status==='pending');
+  const dq=S.dateQueue;
+  return `
+    <div class="psec">
+      <div class="ptitle">Brain Dump</div>
+      <textarea class="dump" id="dump-inp" placeholder="Anything on your mind... tasks, ideas, follow-ups, call notes. Raw is fine."></textarea>
+      <div class="ph-row">
+        <input type="file" id="ph-inp" accept="image/*">
+        <button class="ph-btn" onclick="document.getElementById('ph-inp').click()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Photo of notes
+        </button>
+        <span id="ph-status" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="d-acts">
+        <button class="db" onclick="document.getElementById('dump-inp').value=''">Clear</button>
+        <button class="db pri" onclick="processDumpBtn()">Process →</button>
+      </div>
+    </div>
+
+    <div class="psec">
+      <div class="ptitle">Add Task Manually</div>
+      <input type="text" class="add-inp" id="add-task-inp" placeholder="Task description...">
+      <div class="add-row">
+        <select class="add-sel" id="add-domain">
+          <option>FGW</option><option>Strategic</option><option>BendFlow</option><option>Verrité</option><option>Jump Box</option><option>Wedding</option><option>Personal</option>
+        </select>
+        <input type="date" class="add-date" id="add-date">
+      </div>
+      <button class="db pri" style="width:100%" onclick="addManualTask()">Add to today</button>
+    </div>
+
+    ${dq.length?`<div class="psec" style="background:var(--amber-bg);border:1px solid var(--amber)">
+      <div class="ptitle" style="color:var(--amber)">Date needed (${dq.length})</div>
+      <div class="modal-task">${dq[0].text}</div>
+      <div class="modal-lbl">When does this need to happen?</div>
+      <input type="date" class="modal-inp" id="dq-date" style="margin-bottom:5px">
+      <input type="time" class="modal-inp" id="dq-time" placeholder="Time (optional)">
+      <div class="btn-row">
+        <button class="btn btn-p" style="font-size:12px" onclick="resolveDateQ('${dq[0].id}',document.getElementById('dq-date').value,document.getElementById('dq-time').value)">Confirm</button>
+        <button class="btn" style="font-size:12px" onclick="resolveDateQ('${dq[0].id}','TBD',null)">No date</button>
+      </div>
+    </div>`:''}
+
+    ${pending.length?`<div class="psec">
+      <div class="ptitle">Task Inbox <span style="font-weight:400;color:var(--hint)">${pending.length}</span></div>
+      ${pending.map(item=>`<div class="inbox-row">
+        <div style="flex:1">
+          <div class="ix-t">${item.text}</div>
+          <div class="ix-d">${badge(item.domain||'FGW')} ${item.date?`<span style="font-size:11px;color:var(--hint);margin-left:3px">${item.date}</span>`:'<span style="font-size:11px;color:var(--red);margin-left:3px">no date</span>'}</div>
+        </div>
+        <div class="ix-acts">
+          <button class="ix-btn ok" onclick="approveInbox('${item.id}')">✓</button>
+          <button class="ix-btn" onclick="removeInbox('${item.id}')">×</button>
+        </div>
+      </div>`).join('')}
+      <div class="btn-row">
+        <button class="btn btn-p" style="font-size:11px" onclick="approveAllDated()">Approve all dated</button>
+      </div>
+    </div>`:''}
+
+    <div class="psec">
+      <div class="ptitle">Improve Intelligence</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:7px">Tell me what I'm getting wrong. I'll learn from it.</div>
+      <textarea class="fb-area" id="fb-inp" placeholder="e.g. You keep flagging Joe's updates as Bucket 1. Those are just status updates..."></textarea>
+      <div class="btn-row">
+        <button class="btn btn-p" style="font-size:12px" onclick="submitFeedback()">Submit feedback</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCustomers(){
+  const custs=S.custDetail ? null : S.customers;
+  if(S.custDetail){
+    const c=S.customers.find(x=>x.id===S.custDetail); if(!c){ set({custDetail:null}); return renderCustomers(); }
+    return `<div style="padding:18px 22px">
+      <button class="btn" style="margin-bottom:14px;font-size:12px" onclick="set({custDetail:null})">← Back</button>
+      <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
+        <div class="av" style="width:44px;height:44px;font-size:15px">${initials(c.name)}</div>
+        <div><div style="font-size:17px;font-weight:500">${c.name}</div><div style="font-size:13px;color:var(--muted)">${c.company||''} ${c.email?'· '+c.email:''}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:16px">
+        <div class="sc"><div class="sv">${(c.calls||[]).length}</div><div class="sl">calls logged</div></div>
+        <div class="sc"><div class="sv">${(c.notes||[]).length}</div><div class="sl">notes</div></div>
+      </div>
+      ${(c.calls||[]).length?`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Call History</div>${c.calls.map(call=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px"><span>${call.date||''}</span></div>${call.summary?`<div style="font-size:13px">${call.summary}</div>`:''}</div>`).join('')}</div>`:''}
+      ${(c.notes||[]).length?`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Notes</div>${c.notes.map(n=>`<div style="background:var(--s2);border-radius:6px;padding:8px 10px;font-size:13px;margin-bottom:5px">${n.text}</div>`).join('')}</div>`:''}
+      <div><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Add Note</div>
+        <textarea class="fb-area" id="cust-note" placeholder="Add a note..."></textarea>
+        <div class="btn-row"><button class="btn btn-p" style="font-size:12px" onclick="addCustNote('${c.id}')">Save note</button></div>
+      </div>
+    </div>`;
+  }
+  return `<div style="padding:14px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+    <div><div style="font-size:15px;font-weight:500">Customer Records</div><div style="font-size:12px;color:var(--muted);margin-top:1px">${S.customers.length} contacts · built from email threads</div></div>
+    <button class="btn btn-p" style="font-size:12px" onclick="showAddCust()">+ Add</button>
+  </div>
+  <div style="padding:0 22px"><input type="text" class="add-inp" id="cust-search" placeholder="Search..." oninput="renderCustList(this.value)" style="margin:10px 0"></div>
+  <div id="cust-list" style="padding:0 22px">
+    ${S.customers.length?S.customers.map(c=>`<div class="cust-row" onclick="set({custDetail:'${c.id}'})">
+      <div class="av">${initials(c.name)}</div>
+      <div style="flex:1"><div class="cname">${c.name}</div><div class="cmeta">${c.company||c.email||''}</div><div class="clast">${c.type?badge(c.type):''}${c.lastContact?' · '+timeAgo(c.lastContact):''}</div></div>
+    </div>`).join(''):'<div class="empty">No contacts yet. Run a briefing to start building your contact list.</div>'}
+  </div>`;
+}
+
+function renderSettings(){
+  return `<div class="settings-wrap">
+    <div style="font-size:16px;font-weight:500;margin-bottom:3px">Settings</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Configure API connections and preferences</div>
+
+    <div class="set-block">
+      <div class="set-lbl">Claude API Key</div>
+      <div class="set-sub">From console.anthropic.com. Stored locally in your browser only. Never shared except with the Claude API directly.</div>
+      <input type="password" class="set-inp" id="key-inp" placeholder="sk-ant-api03-..." value="${CFG.key?'••••••••••••••••':''}">
+      <div class="btn-row">
+        <button class="btn btn-p" style="font-size:12px" onclick="saveKey()">Save API key</button>
+        ${CFG.key?'<span style="font-size:12px;color:var(--green);padding:6px 0">✓ Key configured</span>':''}
+      </div>
+    </div>
+
+    <div class="set-block">
+      <div class="set-lbl">Google Apps Script URL</div>
+      <div class="set-sub">Deploy the Code.gs file from this project as a Google Apps Script Web App. Paste the URL here. This connects to your Gmail and Calendar natively — no API costs.</div>
+      <input type="text" class="set-inp" id="url-inp" placeholder="https://script.google.com/macros/s/..." value="${CFG.url||''}">
+      <div class="btn-row">
+        <button class="btn btn-p" style="font-size:12px" onclick="saveUrl()">Save URL</button>
+        <button class="btn" style="font-size:12px" onclick="testUrl()">Test connection</button>
+        ${CFG.url?'<span style="font-size:12px;color:var(--green);padding:6px 0">✓ URL configured</span>':''}
+      </div>
+      <div id="url-test-result" style="font-size:12px;margin-top:7px"></div>
+    </div>
+
+    <div class="set-block">
+      <div class="set-lbl">This page's URL (for Stream Deck)</div>
+      <div class="set-sub">Set a Stream Deck "Open" button to this URL to open the Command Center in a dedicated window.</div>
+      <div class="url-display">${window.location.href}</div>
+    </div>
+
+    <div class="set-block">
+      <div class="set-lbl">Setup Guide</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.8">
+        <div style="margin-bottom:6px"><strong style="color:var(--text)">1.</strong> Get Claude API key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue)">console.anthropic.com</a></div>
+        <div style="margin-bottom:6px"><strong style="color:var(--text)">2.</strong> Open <a href="https://script.google.com" target="_blank" style="color:var(--blue)">script.google.com</a> → your "Personal Assistant" project</div>
+        <div style="margin-bottom:6px"><strong style="color:var(--text)">3.</strong> Replace Code.gs with the Apps Script code (from the README in your GitHub repo)</div>
+        <div style="margin-bottom:6px"><strong style="color:var(--text)">4.</strong> Run setupSheets() once to initialize</div>
+        <div style="margin-bottom:6px"><strong style="color:var(--text)">5.</strong> Deploy → Web App → Execute as Me → Anyone can access</div>
+        <div><strong style="color:var(--text)">6.</strong> Copy the web app URL and paste above</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDashboard(){
+  return `
+    <div class="tab-bar">
+      <button class="tb ${S.tab==='morning'?'on':''}" onclick="setTab('morning')">Morning</button>
+      <button class="tb ${S.tab==='eod'?'on':''}" onclick="setTab('eod')">End of Day</button>
+    </div>
+    <div id="tab-content">${S.tab==='morning'?renderMorningTab():renderEODTab()}</div>
+  `;
+}
+
+// ============================================================
+// MAIN RENDER
+// ============================================================
+function render(){
+  const shell = document.getElementById('shell');
+  if(!shell) return;
+  shell.innerHTML = `
+    ${renderTopBar()}
+    <div id="hdr-area">${renderHeader()}</div>
+    <div class="main">
+      <div class="left" id="left-content">
+        ${S.nav==='dashboard'?renderDashboard():S.nav==='customers'?renderCustomers():renderSettings()}
+      </div>
+      <div class="right" id="right-panel">
+        ${renderRightPanel()}
+      </div>
+    </div>
+  `;
+  bindPhotoInput();
+}
+
+// ============================================================
+// EVENT HANDLERS (global functions called from HTML)
+// ============================================================
+function setNav(n){ set({nav:n,custDetail:null}); }
+function setTab(t){ set({tab:t}); }
+
+async function addBlock(btn, encoded){
+  const b = JSON.parse(decodeURIComponent(encoded));
+  btn.textContent='Adding...'; btn.disabled=true;
+  try{
+    const d = await fetchAppsScript('createEvent', {event:{summary:b.label,description:b.description,duration:b.duration||30}});
+    if(d?.status==='created'){ btn.textContent='✓ Added'; btn.className='cadd added'; }
+    else throw new Error('Failed');
+  }catch(e){ btn.textContent='+Calendar'; btn.disabled=false; toast('Add to calendar: '+e.message,true); }
+}
+
+async function processDumpBtn(){
+  const text = document.getElementById('dump-inp')?.value?.trim(); if(!text)return;
+  const btn = document.querySelector('#dump-inp~.d-acts .pri');
+  if(btn){btn.textContent='Processing...';btn.disabled=true;}
+  try{
+    if(CFG.url) await fetchAppsScript('saveBrainDump',{text,source:'brain dump',timestamp:new Date().toISOString()});
+    const items = await processDump(text);
+    items.forEach(item=>addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,priority:item.priority||'medium',source:'brain dump'}));
+    if(document.getElementById('dump-inp')) document.getElementById('dump-inp').value='';
+    toast(`${items.length} items added to inbox`);
+  }catch(e){ toast('Error: '+e.message,true); }
+  finally{ if(btn){btn.textContent='Process →';btn.disabled=false;} }
+}
+
+function addManualTask(){
+  const t=document.getElementById('add-task-inp')?.value?.trim(); if(!t)return;
+  const domain=document.getElementById('add-domain')?.value||'FGW';
+  const date=document.getElementById('add-date')?.value||null;
+  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:t,meta:date?`Due ${date}`:'Added manually',domain,est:'15m',done:false,eodStatus:null,date}];
+  set({tasks});
+  if(document.getElementById('add-task-inp')) document.getElementById('add-task-inp').value='';
+  toast('Task added');
+}
+
+function removeInbox(id){ set({inbox:S.inbox.map(i=>i.id===id?{...i,status:'removed'}:i)}); }
+function approveAllDated(){ S.inbox.filter(i=>i.status==='pending'&&i.date).forEach(i=>approveInbox(i.id)); toast('Approved all dated items'); }
+
+function submitFeedback(){
+  const text=document.getElementById('fb-inp')?.value?.trim(); if(!text)return;
+  set({feedback:[...S.feedback,{id:'f_'+Date.now(),text,created:new Date().toISOString(),applied:false}]});
+  if(document.getElementById('fb-inp')) document.getElementById('fb-inp').value='';
+  toast('Feedback saved — applied to next briefing');
+}
+
+function addCustNote(id){
+  const text=document.getElementById('cust-note')?.value?.trim(); if(!text)return;
+  const customers=S.customers.map(c=>c.id===id?{...c,notes:[...(c.notes||[]),{text,date:new Date().toISOString()}]}:c);
+  set({customers});
+  toast('Note saved');
+}
+
+function renderCustList(q=''){
+  const list=document.getElementById('cust-list'); if(!list)return;
+  const filtered=S.customers.filter(c=>[c.name,c.company,c.email].filter(Boolean).join(' ').toLowerCase().includes(q.toLowerCase()));
+  list.innerHTML=filtered.length?filtered.map(c=>`<div class="cust-row" onclick="set({custDetail:'${c.id}'})"><div class="av">${initials(c.name)}</div><div style="flex:1"><div class="cname">${c.name}</div><div class="cmeta">${c.company||c.email||''}</div></div></div>`).join(''):'<div class="empty">No matches</div>';
+}
+
+function showAddCust(){
+  const name=prompt('Customer name:'); if(!name)return;
+  const email=prompt('Email (optional):');
+  const company=prompt('Company (optional):');
+  const customers=[...S.customers,{id:'c_'+Date.now(),name,email:email||'',company:company||'',type:'Unknown',created:new Date().toISOString(),lastContact:new Date().toISOString(),calls:[],notes:[]}];
+  set({customers});
+}
+
+function saveKey(){
+  const v=document.getElementById('key-inp')?.value?.trim();
+  if(v&&!v.includes('•')){ localStorage.setItem('fgw_key',v); toast('API key saved'); render(); }
+}
+function saveUrl(){
+  const v=document.getElementById('url-inp')?.value?.trim();
+  if(v){ localStorage.setItem('fgw_url',v); toast('Script URL saved'); render(); }
+}
+async function testUrl(){
+  const url=document.getElementById('url-inp')?.value?.trim()||CFG.url;
+  const res=document.getElementById('url-test-result'); if(!url||!res)return;
+  res.textContent='Testing...'; res.style.color='var(--muted)';
+  try{
+    const r=await fetch(url+'?action=ping');
+    if(r.ok){res.textContent='✓ Connection successful';res.style.color='var(--green)';}
+    else{res.textContent=`Error ${r.status}`;res.style.color='var(--red)';}
+  }catch(e){res.textContent='Connection failed: '+e.message;res.style.color='var(--red)';}
+}
+
+function bindPhotoInput(){
+  const inp=document.getElementById('ph-inp'); if(!inp)return;
+  inp.addEventListener('change',async(e)=>{
+    const file=e.target.files[0]; if(!file)return;
+    const status=document.getElementById('ph-status'); if(status)status.textContent='Reading handwriting...';
+    try{
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const items=await processImage(b64,file.type);
+      items.forEach(item=>addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,source:'handwritten note',priority:item.priority||'medium'}));
+      if(status)status.textContent=`${items.length} items extracted`;
+      setTimeout(()=>{if(status)status.textContent='';},3000);
+    }catch(e){if(status)status.textContent='Error: '+e.message;}
+  });
+}
+
+// ============================================================
+// CLOCK
+// ============================================================
+setInterval(()=>{
+  const c=document.getElementById('clk-display'); if(c)c.textContent=fmtTime();
+  const h=document.getElementById('hdr-time'); if(h)h.textContent=fmtTime();
+},30000);
+
+// ============================================================
+// INIT
+// ============================================================
+async function init(){
+  const wx=await fetchWeather();
+  S.weather=wx;
+
+  // Check for today's stored briefing
+  const storedDate=localStorage.getItem('fgw_briefing_date');
+  if(storedDate===new Date().toDateString()){
+    const stored=localStorage.getItem('fgw_briefing');
+    if(stored){ try{ S.briefing=JSON.parse(stored); }catch(e){} }
+  }
+
+  document.getElementById('loading').style.display='none';
+  document.getElementById('shell').style.display='flex';
+  render();
+}
+
+init();
+</script>
+</body>
+</html>

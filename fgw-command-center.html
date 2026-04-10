@@ -266,21 +266,20 @@ function toast(msg,err=false){
 }
 
 // ============================================================
-// API CALLS — all Claude calls routed through Apps Script (no CORS)
+// API CALLS — all routed through Apps Script via GET (CORS-safe)
 // ============================================================
-async function callAppsScript(action, body=null){
+async function callAppsScriptGET(params){
   if(!CFG.url) throw new Error('Apps Script URL not set — go to Settings');
-  const url = body ? CFG.url : `${CFG.url}?action=${action}`;
-  const opts = body
-    ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})}
-    : {method:'GET'};
-  const r=await fetch(url,opts);
+  const qs=Object.entries(params).map(([k,v])=>
+    `${encodeURIComponent(k)}=${encodeURIComponent(typeof v==='object'?JSON.stringify(v):v)}`
+  ).join('&');
+  const r=await fetch(`${CFG.url}?${qs}`);
   if(!r.ok) throw new Error('Apps Script error: '+r.status);
   return r.json();
 }
 
 async function fetchAppsScript(action, body=null){
-  try{ return await callAppsScript(action, body); }catch(e){ return null; }
+  try{ return await callAppsScriptGET(body ? {action,...body} : {action}); }catch(e){ return null; }
 }
 
 async function fetchWeather(){
@@ -294,21 +293,27 @@ async function fetchWeather(){
 
 async function generateBriefing(brainItems=[], carryOver=[]){
   if(!CFG.key) throw new Error('Claude API key not set — go to Settings');
-  const result = await callAppsScript('generateBriefing', {claudeKey:CFG.key, brainItems, carryOver});
+  if(!CFG.url) throw new Error('Apps Script URL not set — go to Settings');
+  const result = await callAppsScriptGET({
+    action:'generateBriefing',
+    key:CFG.key,
+    brainItems:JSON.stringify(brainItems),
+    carryOver:JSON.stringify(carryOver)
+  });
   if(result.error) throw new Error(result.error);
   return result.briefing;
 }
 
 async function processImage(b64, mime){
   if(!CFG.key) throw new Error('Claude API key not set');
-  const result = await callAppsScript('processImage', {claudeKey:CFG.key, b64, mime});
+  const result = await callAppsScriptGET({action:'processImage', key:CFG.key, b64, mime});
   if(result.error) throw new Error(result.error);
   return result.items||[];
 }
 
 async function processDump(text){
   if(!CFG.key) throw new Error('Claude API key not set');
-  const result = await callAppsScript('processDump', {claudeKey:CFG.key, text});
+  const result = await callAppsScriptGET({action:'processDump', key:CFG.key, text});
   if(result.error) throw new Error(result.error);
   return result.items||[];
 }

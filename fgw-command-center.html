@@ -635,14 +635,33 @@ function renderRightPanel(){
 
     ${pending.length?`<div class="psec">
       <div class="ptitle">Task Inbox <span style="font-weight:400;color:var(--hint)">${pending.length}</span></div>
-      ${pending.map(item=>`<div class="inbox-row">
-        <div style="flex:1">
-          <div class="ix-t">${item.text}</div>
-          <div class="ix-d">${badge(item.domain||'FGW')} ${item.date?`<span style="font-size:11px;color:var(--hint);margin-left:3px">${item.date}</span>`:'<span style="font-size:11px;color:var(--red);margin-left:3px">no date</span>'}</div>
+      ${pending.map(item=>`<div class="inbox-row" id="irow_${item.id}" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;align-items:flex-start;gap:7px">
+          <div style="flex:1">
+            <div class="ix-t">${item.text}</div>
+            <div class="ix-d" style="margin-top:3px">${badge(item.domain||'FGW')} ${badge(item.priority||'medium')} ${item.date?`<span style="font-size:11px;color:var(--hint);margin-left:3px">${item.date}</span>`:'<span style="font-size:11px;color:var(--red);margin-left:3px">no date</span>'}</div>
+          </div>
+          <div class="ix-acts">
+            <button class="ix-btn" onclick="toggleInboxEdit('${item.id}')" title="Edit">✏️</button>
+            <button class="ix-btn ok" onclick="approveInbox('${item.id}')" title="Approve">✓</button>
+            <button class="ix-btn" onclick="removeInbox('${item.id}')" title="Drop">×</button>
+          </div>
         </div>
-        <div class="ix-acts">
-          <button class="ix-btn ok" onclick="approveInbox('${item.id}')">✓</button>
-          <button class="ix-btn" onclick="removeInbox('${item.id}')">×</button>
+        <div id="iedit_${item.id}" style="display:none;background:var(--s2);border-radius:var(--r);padding:10px;display:none;flex-direction:column;gap:6px">
+          <textarea id="itxt_${item.id}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--surface);color:var(--text);resize:vertical;outline:none;min-height:52px">${item.text}</textarea>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+            <select id="idom_${item.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;background:var(--s2);color:var(--text);outline:none">
+              ${['FGW','Strategic','BendFlow','Verrité','Jump Box','Wedding','Personal'].map(d=>`<option${(item.domain||'FGW')===d?' selected':''}>${d}</option>`).join('')}
+            </select>
+            <select id="ipri_${item.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;background:var(--s2);color:var(--text);outline:none">
+              ${['high','medium','low'].map(p=>`<option${(item.priority||'medium')===p?' selected':''}>${p}</option>`).join('')}
+            </select>
+          </div>
+          <input type="date" id="idate_${item.id}" value="${item.date||''}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;background:var(--s2);color:var(--text);outline:none;width:100%">
+          <div style="display:flex;gap:5px">
+            <button onclick="saveInboxEdit('${item.id}')" style="flex:1;padding:5px;background:var(--text);color:#fff;border:none;border-radius:var(--r);font-family:var(--font);font-size:12px;cursor:pointer">Save + Approve</button>
+            <button onclick="toggleInboxEdit('${item.id}')" style="padding:5px 10px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;cursor:pointer;color:var(--muted)">Cancel</button>
+          </div>
         </div>
       </div>`).join('')}
       <div class="btn-row">
@@ -827,7 +846,25 @@ async function quickCapture(){
   try{ await callAppsScriptGET({action:'addTodo',text,domain,priority}); }catch(e){}
 }
 
-function removeInbox(id){ set({inbox:S.inbox.map(i=>i.id===id?{...i,status:'removed'}:i)}); }
+function toggleInboxEdit(id){
+  const el = document.getElementById('iedit_'+id);
+  if(!el) return;
+  const showing = el.style.display === 'flex';
+  el.style.display = showing ? 'none' : 'flex';
+}
+
+function saveInboxEdit(id){
+  const text = document.getElementById('itxt_'+id)?.value?.trim();
+  const domain = document.getElementById('idom_'+id)?.value;
+  const priority = document.getElementById('ipri_'+id)?.value;
+  const date = document.getElementById('idate_'+id)?.value;
+  if(!text) return;
+  // Update the inbox item with edited values
+  const inbox = S.inbox.map(i => i.id===id ? {...i, text, domain, priority, date: date||null} : i);
+  set({inbox});
+  // Now approve it
+  approveInbox(id);
+}
 function approveAllDated(){ S.inbox.filter(i=>i.status==='pending'&&i.date).forEach(i=>approveInbox(i.id)); toast('Approved all dated items'); }
 
 function submitFeedback(){

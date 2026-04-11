@@ -945,52 +945,13 @@ async function showThreadDetail(threadId, titleEncoded) {
     if (result.error) throw new Error(result.error);
 
     const history = result.history || [];
-    const gmailLink = result.leadInfo?.gmailLink || `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
+    let gmailLink = result.leadInfo?.gmailLink || `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
 
-    // Build conversation text for Claude
-    const convo = history.map((msg, i) =>
-      `[${i+1}] ${msg.dateFormatted} — ${msg.from}${msg.isInternal ? ' (FGW)' : ''}:\n${msg.body}`
-    ).join('\n\n---\n\n');
-
-    // Call Claude directly from browser for the AI summary
-    const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': CFG.key,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 800,
-        messages: [{
-          role: 'user',
-          content: `You are summarizing an email thread for Eric Powell, owner of Flickinger Glassworks (FGW) in Red Hook Brooklyn. FGW does custom glass fabrication. Eric needs a concise intelligence briefing on this thread.
-
-Thread subject: "${title}"
-${result.messageCount} messages total.
-
-FULL THREAD:
-${convo}
-
-Write a briefing with these exact sections — keep each tight and specific:
-
-**STATUS** — one sentence: what is the current state of this job/relationship right now?
-
-**WHAT HAPPENED** — bullet points in chronological order. Each bullet = one meaningful development with the date. Be specific: names, amounts, decisions, commitments made.
-
-**WHERE IT STANDS** — what is the single most important unresolved issue or next step?
-
-**RECOMMENDED ACTION** — one specific action Eric should take, with suggested language if relevant.
-
-Be direct, specific, no filler. Use real names and numbers from the thread.`
-        }]
-      })
-    });
-
-    const aiData = await aiResp.json();
-    if (!aiResp.ok) throw new Error(aiData.error?.message || 'Claude API error');
-    const summary = aiData.content[0].text;
+    // Route through Apps Script — direct Anthropic API calls are blocked by CORS from GitHub Pages
+    const aiResult = await callAppsScriptGET({ action: 'summarizeThread', key: CFG.key, threadId, subject: title });
+    if (aiResult.error) throw new Error(aiResult.error);
+    const summary = aiResult.summary;
+    if (aiResult.gmailLink) gmailLink = aiResult.gmailLink;
 
     // Render the AI summary + raw thread toggle
     const drawerBody = document.getElementById('drawer-body');

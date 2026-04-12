@@ -68,6 +68,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .tt{font-size:13px;font-weight:500;line-height:1.4}
 .tr.done .tt{text-decoration:line-through}
 .tm{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4}
+.task-links{display:flex;gap:8px;margin-top:3px;align-items:center}
+.task-link{font-size:11px;color:var(--blue);text-decoration:none;background:none;border:none;cursor:pointer;padding:0;font-family:var(--font)}
+.task-link:hover{text-decoration:underline}
 .tr-r{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
 .est{font-size:11px;color:var(--hint);font-family:var(--mono)}
 .bdg{display:inline-block;font-size:10px;font-weight:500;padding:2px 6px;border-radius:4px;white-space:nowrap}
@@ -115,8 +118,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .db:hover{background:var(--s2);color:var(--text)}
 .db.pri{background:var(--text);color:#fff;border-color:var(--text)}
 .db.pri:hover{opacity:.85}
-.inbox-row{display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px solid var(--border)}
+.inbox-row{display:flex;flex-direction:column;gap:6px;padding:7px 0;border-bottom:1px solid var(--border)}
 .inbox-row:last-child{border-bottom:none}
+.ix-head{display:flex;align-items:flex-start;gap:7px}
 .ix-t{flex:1;font-size:13px;line-height:1.4}
 .ix-d{font-size:11px;color:var(--muted);margin-top:2px}
 .ix-acts{display:flex;gap:3px;flex-shrink:0}
@@ -124,6 +128,8 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .ix-btn:hover{background:var(--s2)}
 .ix-btn.ok{color:var(--green);border-color:var(--green)}
 .ix-btn.ok:hover{background:var(--green-bg)}
+.ix-edit{display:none;flex-direction:column;gap:6px;background:var(--s2);border-radius:var(--r);padding:10px}
+.ix-edit.show{display:flex}
 .add-inp{width:100%;padding:6px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none;margin-bottom:5px}
 .add-inp:focus{border-color:var(--borderS);background:var(--surface)}
 .add-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px}
@@ -176,6 +182,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 .set-block{margin-bottom:22px;padding-bottom:22px;border-bottom:1px solid var(--border)}
 .set-block:last-child{border-bottom:none}
 .url-display{font-family:var(--mono);font-size:11px;background:var(--s2);padding:7px 9px;border-radius:var(--r);color:var(--muted);word-break:break-all;margin-top:6px}
+.sync-badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:20px}
+.sync-badge.ok{background:var(--green-bg);color:var(--green)}
+.sync-badge.err{background:var(--red-bg);color:var(--red)}
+.sync-badge.syncing{background:var(--amber-bg);color:var(--amber)}
+/* Thread detail drawer */
+.drawer{position:fixed;top:0;right:0;width:520px;max-width:95vw;height:100vh;background:var(--surface);border-left:1px solid var(--border);z-index:500;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .2s ease}
+.drawer.open{transform:translateX(0)}
+.drawer-hdr{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0}
+.drawer-body{flex:1;overflow-y:auto;padding:18px 20px}
+.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.2);z-index:499;display:none}
+.drawer-backdrop.show{display:block}
 </style>
 </head>
 <body>
@@ -186,51 +203,213 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:14
 </div>
 <div id="shell" style="display:none"></div>
 
+<!-- Thread detail drawer -->
+<div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="thread-drawer">
+  <div class="drawer-hdr">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:14px;font-weight:500;line-height:1.4;margin-bottom:2px" id="drawer-title">Thread Summary</div>
+      <div style="font-size:11px;color:var(--muted)" id="drawer-subtitle"></div>
+    </div>
+    <button onclick="closeDrawer()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--muted);padding:0 0 0 14px;flex-shrink:0;line-height:1">×</button>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <div style="text-align:center;padding:40px;color:var(--hint)">Loading...</div>
+  </div>
+</div>
+
 <script>
-// ============================================================
-// CONFIG — stored in localStorage, set via Settings
-// ============================================================
+// ================================================================
+// SUPABASE CONFIG
+// ================================================================
+const SB_URL = 'https://jbtmokiuaaoqkoyewbrh.supabase.co';
+const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpidG1va2l1YWFvcWtveWV3YnJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5OTk1MTgsImV4cCI6MjA5MTU3NTUxOH0.D9Id9QUuz9URm3O1fG8z1ZDARRoSu0V2U5Xctx9JY2o';
+
+// ================================================================
+// CONFIG — API key and script URL in localStorage (sensitive, browser only)
+// ================================================================
 const CFG = {
   get key(){ return localStorage.getItem('fgw_key')||'' },
   get url(){ return localStorage.getItem('fgw_url')||'' },
   model: 'claude-sonnet-4-20250514',
   lat: 40.6782, lon: -74.0060,
-  domainColors: {FGW:'b-blu',Strategic:'b-pur',BendFlow:'b-tel',Verrité:'b-amb','Jump Box':'b-grn',Wedding:'b-red',Personal:'b-gry',Finance:'b-amb',Legal:'b-red',Calls:'b-gry',Ops:'b-tel'},
+  domainColors: {FGW:'b-blu',Strategic:'b-pur',BendFlow:'b-tel','Verrité':'b-amb','Jump Box':'b-grn',Wedding:'b-red',Personal:'b-gry',Finance:'b-amb',Legal:'b-red',Calls:'b-gry',Ops:'b-tel'},
   stageColors: {Fresh:'b-grn',Quoted:'b-blu',Negotiating:'b-amb',Approved:'b-tel','In Production':'b-pur','Shipping':'b-blu',Stale:'b-red',Closed:'b-gry'}
 };
 
-// ============================================================
-// STATE
-// ============================================================
-const S = {
-  nav: 'dashboard',
-  tab: 'morning',
-  briefing: null,
-  tasks: JSON.parse(localStorage.getItem('fgw_tasks')||'[]'),
-  inbox: JSON.parse(localStorage.getItem('fgw_inbox')||'[]'),
-  customers: JSON.parse(localStorage.getItem('fgw_customers')||'[]'),
-  feedback: JSON.parse(localStorage.getItem('fgw_feedback')||'[]'),
-  calEvents: [],
-  weather: null,
-  loading: false,
-  dateQueue: [],
-  eodNotes: '',
-  custDetail: null
+// ================================================================
+// SUPABASE CLIENT — direct REST API calls
+// ================================================================
+const sb = {
+  headers: { 'apikey': SB_ANON, 'Authorization': 'Bearer ' + SB_ANON, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+
+  async select(table, filter='', opts={}) {
+    let url = `${SB_URL}/rest/v1/${table}?${filter}`;
+    if (opts.order) url += `&order=${opts.order}`;
+    if (opts.limit) url += `&limit=${opts.limit}`;
+    const r = await fetch(url, { headers: this.headers });
+    if (!r.ok) throw new Error(`sb.select ${table}: ${r.status}`);
+    return r.json();
+  },
+
+  async upsert(table, data) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { ...this.headers, 'Prefer': 'resolution=merge-duplicates,return=representation' },
+      body: JSON.stringify(Array.isArray(data) ? data : [data])
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(`sb.upsert ${table}: ${r.status} ${t}`); }
+    return r.json();
+  },
+
+  async update(table, id, data, idCol='id') {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${idCol}=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: this.headers,
+      body: JSON.stringify(data)
+    });
+    if (!r.ok) throw new Error(`sb.update ${table}: ${r.status}`);
+    return r.json();
+  },
+
+  async insert(table, data) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify(Array.isArray(data) ? data : [data])
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error(`sb.insert ${table}: ${r.status} ${t}`); }
+    return r.json();
+  },
+
+  async delete(table, id, idCol='id') {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${idCol}=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE', headers: this.headers
+    });
+    if (!r.ok) throw new Error(`sb.delete ${table}: ${r.status}`);
+    return true;
+  }
 };
 
-function save(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
-function set(upd){
-  Object.assign(S, upd);
-  if('tasks' in upd) save('fgw_tasks', S.tasks);
-  if('inbox' in upd) save('fgw_inbox', S.inbox);
-  if('customers' in upd) save('fgw_customers', S.customers);
-  if('feedback' in upd) save('fgw_feedback', S.feedback);
-  render();
+// ================================================================
+// STATE — Supabase is source of truth. S is session cache.
+// ================================================================
+const S = {
+  nav: 'dashboard', tab: 'morning',
+  briefing: null, tasks: [], inbox: [], customers: [],
+  calEvents: [], weather: null, loading: false,
+  dateQueue: [], eodNotes: '', custDetail: null,
+  syncStatus: 'ok' // ok | syncing | error
+};
+
+function set(upd){ Object.assign(S, upd); render(); }
+
+// ================================================================
+// SUPABASE STATE OPERATIONS
+// All writes go to Supabase immediately. Reads load from Supabase on init.
+// ================================================================
+
+async function dbSaveTask(task) {
+  try {
+    await sb.upsert('tasks', {
+      id: task.id, title: task.title||'', meta: task.meta||'',
+      bucket: task.bucket||1, domain: task.domain||'FGW',
+      est: task.est||'15m', priority: task.priority||'medium',
+      status: task.done ? 'done' : (task.eodStatus==='drop' ? 'dropped' : 'open'),
+      eod_status: task.eodStatus||null,
+      due_date: task.dueDate||null,
+      gmail_link: task.gmailLink||null,
+      thread_id: task.threadId||null,
+      source: task.source||'briefing',
+      done: task.done||false,
+      urgent: task.urgent||false
+    });
+  } catch(e) { console.error('dbSaveTask', e.message); }
 }
 
-// ============================================================
+async function dbSaveTasks(tasks) {
+  if (!tasks.length) return;
+  try {
+    const rows = tasks.map(t => ({
+      id: t.id, title: t.title||'', meta: t.meta||'',
+      bucket: t.bucket||1, domain: t.domain||'FGW',
+      est: t.est||'15m', priority: t.priority||'medium',
+      status: t.done ? 'done' : (t.eodStatus==='drop' ? 'dropped' : 'open'),
+      eod_status: t.eodStatus||null,
+      due_date: t.dueDate||null,
+      gmail_link: t.gmailLink||null,
+      thread_id: t.threadId||null,
+      source: t.source||'briefing',
+      done: t.done||false,
+      urgent: t.urgent||false
+    }));
+    await sb.upsert('tasks', rows);
+  } catch(e) { console.error('dbSaveTasks', e.message); }
+}
+
+async function dbSaveInboxItem(item) {
+  try {
+    await sb.upsert('inbox_items', {
+      id: item.id, text: item.text||'',
+      domain: item.domain||'FGW', priority: item.priority||'medium',
+      date: item.date||null, status: item.status||'pending',
+      source: item.source||'manual'
+    });
+  } catch(e) { console.error('dbSaveInboxItem', e.message); }
+}
+
+async function dbSaveEOD(notes, done, carry, dropped, tasks) {
+  try {
+    await sb.insert('eod_log', {
+      notes, done_count: done, carry_count: carry,
+      drop_count: dropped, tasks_snapshot: tasks
+    });
+  } catch(e) { console.error('dbSaveEOD', e.message); }
+}
+
+async function dbLoadState() {
+  try {
+    // Load tasks (open + recent done from today)
+    const today = new Date().toISOString().split('T')[0];
+    const tasks = await sb.select('tasks', `status=neq.dropped&order=created_at.asc`);
+    const inbox = await sb.select('inbox_items', `status=eq.pending&order=created_at.desc`, {limit: 50});
+    const contacts = await sb.select('contacts', '', {order: 'last_seen.desc', limit: 200});
+
+    return {
+      tasks: (tasks||[]).map(dbTaskToLocal),
+      inbox: (inbox||[]).map(dbInboxToLocal),
+      contacts: contacts||[]
+    };
+  } catch(e) {
+    console.error('dbLoadState', e.message);
+    return { tasks: [], inbox: [], contacts: [] };
+  }
+}
+
+function dbTaskToLocal(t) {
+  return {
+    id: t.id, title: t.title, meta: t.meta||'',
+    bucket: t.bucket||1, domain: t.domain||'FGW',
+    est: t.est||'15m', priority: t.priority||'medium',
+    done: t.done||false, eodStatus: t.eod_status||null,
+    dueDate: t.due_date||null, gmailLink: t.gmail_link||'',
+    threadId: t.thread_id||'', source: t.source||'briefing',
+    urgent: t.urgent||false
+  };
+}
+
+function dbInboxToLocal(i) {
+  return {
+    id: i.id, text: i.text, domain: i.domain||'FGW',
+    priority: i.priority||'medium', date: i.date||null,
+    status: i.status||'pending', source: i.source||'manual',
+    created: i.created_at
+  };
+}
+
+// ================================================================
 // UTILITIES
-// ============================================================
+// ================================================================
 function fmtDate(){
   return new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'America/New_York'});
 }
@@ -266,9 +445,9 @@ function toast(msg,err=false){
   setTimeout(()=>t.remove(), err ? 12000 : 4000);
 }
 
-// ============================================================
-// API CALLS — all routed through Apps Script via GET (CORS-safe)
-// ============================================================
+// ================================================================
+// APPS SCRIPT CALLS
+// ================================================================
 async function callAppsScriptGET(params){
   if(!CFG.url) throw new Error('Apps Script URL not set — go to Settings');
   const qs=Object.entries(params).map(([k,v])=>
@@ -292,36 +471,9 @@ async function fetchWeather(){
   }catch(e){ return{display:'Red Hook, Brooklyn'}; }
 }
 
-async function generateBriefing(brainItems=[], carryOver=[]){
-  if(!CFG.key) throw new Error('Claude API key not set — go to Settings');
-  if(!CFG.url) throw new Error('Apps Script URL not set — go to Settings');
-  const result = await callAppsScriptGET({
-    action:'generateBriefing',
-    key:CFG.key,
-    brainItems:JSON.stringify(brainItems),
-    carryOver:JSON.stringify(carryOver)
-  });
-  if(result.error) throw new Error(result.error);
-  return result.briefing;
-}
-
-async function processImage(b64, mime){
-  if(!CFG.key) throw new Error('Claude API key not set');
-  const result = await callAppsScriptGET({action:'processImage', key:CFG.key, b64, mime});
-  if(result.error) throw new Error(result.error);
-  return result.items||[];
-}
-
-async function processDump(text){
-  if(!CFG.key) throw new Error('Claude API key not set');
-  const result = await callAppsScriptGET({action:'processDump', key:CFG.key, text});
-  if(result.error) throw new Error(result.error);
-  return result.items||[];
-}
-
-// ============================================================
+// ================================================================
 // BRIEFING RUNNER
-// ============================================================
+// ================================================================
 async function runBriefing(){
   if(S.loading) return;
   if(!CFG.key){ toast('API key not set — go to Settings',true); set({nav:'settings'}); return; }
@@ -334,67 +486,214 @@ async function runBriefing(){
     const brainItems = S.inbox.filter(i=>i.status==='pending').map(i=>i.text);
     const carryOver = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>t.title);
 
-    const briefing = await generateBriefing(brainItems, carryOver);
+    const result = await callAppsScriptGET({
+      action:'generateBriefing', key:CFG.key,
+      brainItems:JSON.stringify(brainItems),
+      carryOver:JSON.stringify(carryOver)
+    });
+    if(result.error) throw new Error(result.error);
+    const briefing = result.briefing;
+
+    // Store briefing in localStorage (session cache for today)
     localStorage.setItem('fgw_briefing', JSON.stringify(briefing));
     localStorage.setItem('fgw_briefing_date', new Date().toDateString());
 
-    // Update calendar events from briefing if available
     if(briefing.calendarToday) set({calEvents: briefing.calendarToday});
 
     // Build tasks from briefing
-    const existingDone = new Set(S.tasks.filter(t=>t.done).map(t=>t.title));
+    const existingIds = new Set(S.tasks.map(t=>t.id));
     const newTasks = [
-      ...(briefing.bucket1||[]).map(t=>({...t,bucket:1,done:existingDone.has(t.title),eodStatus:null})),
-      ...(briefing.bucket2||[]).map(t=>({...t,bucket:2,done:existingDone.has(t.title),eodStatus:null})),
-      ...(briefing.bucket3||[]).map(t=>({...t,bucket:3,done:existingDone.has(t.title),eodStatus:null})),
-    ];
-    const prevCarry = S.tasks.filter(t=>t.eodStatus==='carry'&&!newTasks.find(n=>n.title===t.title)).map(t=>({...t,eodStatus:null,meta:'(carried over) '+(t.meta||'')}));
+      ...(briefing.bucket1||[]).map(t=>({...t,bucket:1,done:false,eodStatus:null})),
+      ...(briefing.bucket2||[]).map(t=>({...t,bucket:2,done:false,eodStatus:null})),
+      ...(briefing.bucket3||[]).map(t=>({...t,bucket:3,done:false,eodStatus:null})),
+    ].filter(t => !existingIds.has(t.id));
 
-    // Auto-add new contacts
-    if(briefing.newContacts?.length){
-      const customers=[...S.customers];
-      briefing.newContacts.forEach(c=>{
-        if(!customers.find(x=>x.email===c.email)) customers.push({id:'c_'+Date.now()+'_'+Math.random().toString(36).slice(2),created:new Date().toISOString(),lastContact:new Date().toISOString(),calls:[],notes:[],...c});
-      });
-      save('fgw_customers',customers);
-      S.customers=customers;
+    // Carry over tasks from previous EOD
+    const prevCarry = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>({...t,eodStatus:null,meta:'(carried over) '+(t.meta||'')}));
+    const mergedTasks = [...prevCarry, ...newTasks];
+
+    set({briefing, tasks:mergedTasks, loading:false, tab:'morning'});
+
+    // Persist ALL tasks to Supabase — this is the real persistence
+    await dbSaveTasks(mergedTasks);
+
+    // Sync contacts from briefing
+    if(briefing.newContacts?.length) {
+      for (const c of briefing.newContacts) {
+        if (c.email) {
+          try { await sb.upsert('contacts', { email:c.email, name:c.name||'', company:c.company||'', type:c.type||'client' }); } catch(e){}
+        }
+      }
     }
-
-    set({briefing, tasks:[...prevCarry,...newTasks], loading:false, tab:'morning'});
   }catch(e){
     set({loading:false});
     toast('Briefing error: '+e.message, true);
   }
 }
 
-// ============================================================
-// TASK ACTIONS
-// ============================================================
-function toggleTask(id){ set({tasks:S.tasks.map(t=>t.id===id?{...t,done:!t.done}:t)}); }
-function setEOD(id,st){ set({tasks:S.tasks.map(t=>t.id===id?{...t,eodStatus:st,done:st==='done'}:t)}); }
-function addInbox(item){ set({inbox:[...S.inbox,{id:'i_'+Date.now(),status:'pending',source:'manual',created:new Date().toISOString(),...item}]}); }
-function approveInbox(id){
-  const item=S.inbox.find(i=>i.id===id); if(!item)return;
-  if(!item.date){ set({dateQueue:[...S.dateQueue,item]}); return false; }
-  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:item.text,meta:`Added from ${item.source||'inbox'}`,domain:item.domain||'FGW',est:'15m',done:false,eodStatus:null,date:item.date}];
-  const inbox=S.inbox.map(i=>i.id===id?{...i,status:'approved'}:i);
-  set({tasks,inbox}); return true;
-}
-function resolveDateQ(id,date,time){
-  const item=S.dateQueue.find(i=>i.id===id); if(!item)return;
-  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:item.text,meta:`Due ${date}${time?' at '+time:''}`,domain:item.domain||'FGW',est:'15m',done:false,eodStatus:null,date,time}];
-  set({tasks,dateQueue:S.dateQueue.filter(i=>i.id!==id),inbox:S.inbox.map(i=>i.id===item.id?{...i,status:'approved',date,time}:i)});
-}
-function saveEOD(){
-  const notes=document.getElementById('eod-notes-val')?.value||'';
-  const carry=S.tasks.filter(t=>t.eodStatus==='carry').map(t=>t.title);
-  set({eodNotes:notes,tasks:S.tasks.filter(t=>t.eodStatus!=='done'&&t.eodStatus!=='drop').map(t=>({...t,eodStatus:null}))});
-  toast(`Day saved. ${carry.length} tasks carrying over.`);
+// ================================================================
+// TASK ACTIONS — all write to Supabase immediately
+// ================================================================
+async function toggleTask(id){
+  const task = S.tasks.find(t=>t.id===id);
+  if(!task) return;
+  const updated = {...task, done:!task.done};
+  set({tasks:S.tasks.map(t=>t.id===id?updated:t)});
+  await dbSaveTask(updated);
 }
 
-// ============================================================
+async function setEOD(id,st){
+  const task = S.tasks.find(t=>t.id===id);
+  if(!task) return;
+  const updated = {...task, eodStatus:st, done:st==='done'};
+  set({tasks:S.tasks.map(t=>t.id===id?updated:t)});
+  await dbSaveTask(updated);
+}
+
+async function addInbox(item){
+  const newItem = {id:'i_'+Date.now(),status:'pending',source:'manual',created:new Date().toISOString(),...item};
+  set({inbox:[...S.inbox,newItem]});
+  await dbSaveInboxItem(newItem);
+}
+
+async function approveInbox(id){
+  const item=S.inbox.find(i=>i.id===id); if(!item)return;
+  if(!item.date){ set({dateQueue:[...S.dateQueue,item]}); return false; }
+  const newTask = {
+    id:'t_'+Date.now(), bucket:1, title:item.text,
+    meta:`Added from ${item.source||'inbox'}`,
+    domain:item.domain||'FGW', priority:item.priority||'medium',
+    est:'15m', done:false, eodStatus:null, dueDate:item.date,
+    gmailLink:'', threadId:'', source:'inbox'
+  };
+  const updatedItem = {...item, status:'approved'};
+  set({tasks:[...S.tasks,newTask], inbox:S.inbox.map(i=>i.id===id?updatedItem:i)});
+  await dbSaveTask(newTask);
+  await dbSaveInboxItem(updatedItem);
+  return true;
+}
+
+function removeInbox(id){
+  const item = S.inbox.find(i=>i.id===id);
+  if(item) {
+    set({inbox:S.inbox.map(i=>i.id===id?{...i,status:'removed'}:i)});
+    dbSaveInboxItem({...item, status:'removed'});
+  }
+}
+
+function resolveDate(id,date,time){
+  const item=S.dateQueue.find(i=>i.id===id); if(!item)return;
+  const newTask = {
+    id:'t_'+Date.now(), bucket:1, title:item.text,
+    meta:`Due ${date}${time?' at '+time:''}`,
+    domain:item.domain||'FGW', priority:item.priority||'medium',
+    est:'15m', done:false, eodStatus:null, dueDate:date,
+    gmailLink:'', threadId:'', source:'inbox'
+  };
+  set({tasks:[...S.tasks,newTask], dateQueue:S.dateQueue.filter(i=>i.id!==id), inbox:S.inbox.map(i=>i.id===item.id?{...i,status:'approved',date,time}:i)});
+  dbSaveTask(newTask);
+}
+
+async function saveInboxEdit(id){
+  const text = document.getElementById('itxt_'+id)?.value?.trim();
+  const domain = document.getElementById('idom_'+id)?.value;
+  const priority = document.getElementById('ipri_'+id)?.value;
+  const date = document.getElementById('idate_'+id)?.value;
+  if(!text) return;
+  const updated = S.inbox.map(i=>i.id===id?{...i,text,domain,priority,date:date||null}:i);
+  set({inbox:updated});
+  const item = updated.find(i=>i.id===id);
+  await dbSaveInboxItem(item);
+  await approveInbox(id);
+}
+
+function toggleInboxEdit(id){
+  const el = document.getElementById('iedit_'+id);
+  if(!el) return;
+  el.classList.toggle('show');
+}
+
+async function saveEOD(){
+  const notes=document.getElementById('eod-notes-val')?.value||'';
+  const done=S.tasks.filter(t=>t.eodStatus==='done').length;
+  const carry=S.tasks.filter(t=>t.eodStatus==='carry').length;
+  const dropped=S.tasks.filter(t=>t.eodStatus==='drop').length;
+  const remaining = S.tasks.filter(t=>t.eodStatus!=='done'&&t.eodStatus!=='drop').map(t=>({...t,eodStatus:null}));
+
+  set({eodNotes:notes, tasks:remaining});
+
+  // Persist EOD log to Supabase
+  await dbSaveEOD(notes, done, carry, dropped, S.tasks);
+  // Persist remaining tasks
+  await dbSaveTasks(remaining);
+
+  toast(`Day saved. ${carry} tasks carrying over.`);
+}
+
+// ================================================================
+// THREAD SUMMARY DRAWER
+// ================================================================
+async function showSummary(threadId, title){
+  if(!CFG.url||!CFG.key){ toast('API key and URL required',true); return; }
+  document.getElementById('drawer-title').textContent = title;
+  document.getElementById('drawer-subtitle').textContent = 'Analyzing thread...';
+  document.getElementById('drawer-body').innerHTML = `<div style="text-align:center;padding:40px;color:var(--hint)"><div style="margin-bottom:8px">Reading thread & generating summary...</div><div style="width:180px;height:2px;background:var(--border);border-radius:2px;margin:0 auto;overflow:hidden"><div style="height:100%;background:var(--text);border-radius:2px;animation:lf 2s ease infinite alternate"></div></div></div>`;
+  document.getElementById('thread-drawer').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('show');
+
+  try {
+    const result = await callAppsScriptGET({ action:'summarizeThread', key:CFG.key, threadId, subject:title });
+    if(result.error) throw new Error(result.error);
+
+    const summary = result.summary;
+    const history = result.history||[];
+    const gmailLink = result.gmailLink||`https://mail.google.com/mail/u/0/#inbox/${threadId}`;
+
+    document.getElementById('drawer-subtitle').innerHTML = `${result.messageCount} messages · <a href="${gmailLink}" target="_blank" style="color:var(--blue);text-decoration:none">Open in Gmail ↗</a>`;
+
+    const formatted = summary
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- /gm, '• ')
+      .split('\n').map(l=>`<p style="margin:0 0 6px">${l}</p>`).join('');
+
+    document.getElementById('drawer-body').innerHTML = `
+      <div style="font-size:13px;line-height:1.75;color:var(--text)">${formatted}</div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <button onclick="toggleRaw('raw_${threadId}')" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:0">Show full thread ↓</button>
+      </div>
+      <div id="raw_${threadId}" style="display:none;margin-top:12px">
+        ${history.map(msg=>{
+          const fromName = msg.from.replace(/<.+>/,'').trim().replace(/"/g,'');
+          return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+              <span style="font-size:12px;font-weight:500;color:${msg.isInternal?'var(--blue)':'var(--text)'}">${fromName}</span>
+              <span style="font-size:11px;color:var(--hint);font-family:var(--mono)">${msg.dateFormatted}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6;white-space:pre-wrap">${msg.body}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } catch(e) {
+    document.getElementById('drawer-body').innerHTML = `<div style="color:var(--red);font-size:13px">${e.message}</div>`;
+  }
+}
+
+function toggleRaw(id){
+  const el=document.getElementById(id); if(!el)return;
+  const showing = el.style.display!=='none';
+  el.style.display=showing?'none':'block';
+  const btn=el.previousElementSibling?.querySelector('button');
+  if(btn) btn.textContent=showing?'Show full thread ↓':'Hide full thread ↑';
+}
+
+function closeDrawer(){
+  document.getElementById('thread-drawer').classList.remove('open');
+  document.getElementById('drawer-backdrop').classList.remove('show');
+}
+
+// ================================================================
 // RENDER FUNCTIONS
-// ============================================================
+// ================================================================
 function renderTopBar(){
   return `<div class="topbar">
     <div class="tb-left">
@@ -440,11 +739,10 @@ function renderTask(t){
     <div class="tb2">
       <div class="tt">${t.title}</div>
       ${t.meta?`<div class="tm">${t.meta}</div>`:''}
-      ${t.gmailLink?`<div style="display:flex;gap:8px;margin-top:3px;align-items:center">
-        <a href="${t.gmailLink}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">↗ Open in Gmail</a>
-        <span style="font-size:11px;color:var(--muted)">·</span>
-        <button onclick="showThreadDetail('${t.threadId}','${encodeURIComponent(t.title)}')" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0">📋 Summary</button>
-      </div>`:''}
+      <div class="task-links">
+        ${t.gmailLink?`<a href="${t.gmailLink}" target="_blank" class="task-link">↗ Gmail</a>`:''}
+        ${t.threadId?`<button class="task-link" onclick="showSummary('${t.threadId}','${encodeURIComponent(t.title)}')">📋 Summary</button>`:''}
+      </div>
     </div>
     <div class="tr-r"><span class="est">${t.est||'15m'}</span>${badge(t.domain||'FGW')}</div>
   </div>`;
@@ -466,7 +764,7 @@ function renderFocusBlocks(blocks){
       <div><div class="bl">${b.label}</div>${b.description?`<div class="bs">${b.description}</div>`:''}</div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
         ${badge(b.domain||'FGW')}
-        <button class="cadd" onclick="addBlock(this,'${encodeURIComponent(JSON.stringify(b))}')">+ Calendar</button>
+        <button class="cadd" onclick="addBlock(this,'${encodeURIComponent(JSON.stringify(b))}')" >+ Cal</button>
       </div>
     </div>`).join('')}
   </div>`;
@@ -510,9 +808,9 @@ function renderCalEvents(){
   </div>`;
 }
 
-function renderEmptyState(){
+function renderEmpty(){
   return `<div class="sec"><div class="empty" style="padding:40px">
-    <div style="font-size:22px;margin-bottom:8px">☀</div>
+    <div style="font-size:22px;margin-bottom:8px">⬡</div>
     <div style="font-weight:500;margin-bottom:4px">Ready for your briefing</div>
     <div>Click "Run Briefing" to load today's report</div>
   </div></div>`;
@@ -520,7 +818,7 @@ function renderEmptyState(){
 
 function renderMorningTab(){
   const b=S.briefing;
-  if(!b) return renderEmptyState();
+  if(!b) return renderEmpty();
   const b1=S.tasks.filter(t=>t.bucket===1), b2=S.tasks.filter(t=>t.bucket===2), b3=S.tasks.filter(t=>t.bucket===3);
   return `
     ${b.briefing?`<div class="brief-txt">${b.briefing}</div>`:''}
@@ -558,7 +856,6 @@ function renderEODTab(){
     <div class="sec">
       <div class="btn-row">
         <button class="btn btn-p" onclick="saveEOD()">Save + prep tomorrow</button>
-        <button class="btn" onclick="toast('Carry-over: '+S.tasks.filter(t=>t.eodStatus==='carry').length+' tasks. Run briefing tomorrow.')">Preview tomorrow</button>
       </div>
     </div>
     <div class="sec"><div class="sh"><div class="st">Today's Pulse</div></div>
@@ -579,7 +876,7 @@ function renderRightPanel(){
     <div class="psec">
       <div class="ptitle">Quick Capture</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Type anything. I'll sort it into your day.</div>
-      <input type="text" class="add-inp" id="quick-cap-inp" placeholder="Call back Matt White re: glass slumping approval..." style="margin-bottom:5px" onkeydown="if(event.key==='Enter')quickCapture()">
+      <input type="text" class="add-inp" id="quick-cap-inp" placeholder="Call back Matt White re: glass slumping..." style="margin-bottom:5px" onkeydown="if(event.key==='Enter')quickCapture()">
       <div class="add-row">
         <select class="add-sel" id="quick-domain">
           <option>FGW</option><option>Strategic</option><option>BendFlow</option><option>Verrité</option><option>Jump Box</option><option>Wedding</option><option>Personal</option>
@@ -594,6 +891,7 @@ function renderRightPanel(){
       <div style="font-size:11px;color:var(--hint);margin-top:7px">Or email yourself with subject "TODO: your task" — picked up automatically each morning.</div>
     </div>
 
+    <div class="psec">
       <textarea class="dump" id="dump-inp" placeholder="Anything on your mind... tasks, ideas, follow-ups, call notes. Raw is fine."></textarea>
       <div class="ph-row">
         <input type="file" id="ph-inp" accept="image/*">
@@ -628,18 +926,18 @@ function renderRightPanel(){
       <input type="date" class="modal-inp" id="dq-date" style="margin-bottom:5px">
       <input type="time" class="modal-inp" id="dq-time" placeholder="Time (optional)">
       <div class="btn-row">
-        <button class="btn btn-p" style="font-size:12px" onclick="resolveDateQ('${dq[0].id}',document.getElementById('dq-date').value,document.getElementById('dq-time').value)">Confirm</button>
-        <button class="btn" style="font-size:12px" onclick="resolveDateQ('${dq[0].id}','TBD',null)">No date</button>
+        <button class="btn btn-p" style="font-size:12px" onclick="resolveDate('${dq[0].id}',document.getElementById('dq-date').value,document.getElementById('dq-time').value)">Confirm</button>
+        <button class="btn" style="font-size:12px" onclick="resolveDate('${dq[0].id}','TBD',null)">No date</button>
       </div>
     </div>`:''}
 
     ${pending.length?`<div class="psec">
       <div class="ptitle">Task Inbox <span style="font-weight:400;color:var(--hint)">${pending.length}</span></div>
-      ${pending.map(item=>`<div class="inbox-row" id="irow_${item.id}" style="flex-direction:column;align-items:stretch;gap:6px">
-        <div style="display:flex;align-items:flex-start;gap:7px">
+      ${pending.map(item=>`<div class="inbox-row">
+        <div class="ix-head">
           <div style="flex:1">
             <div class="ix-t">${item.text}</div>
-            <div class="ix-d" style="margin-top:3px">${badge(item.domain||'FGW')} ${badge(item.priority||'medium')} ${item.date?`<span style="font-size:11px;color:var(--hint);margin-left:3px">${item.date}</span>`:'<span style="font-size:11px;color:var(--red);margin-left:3px">no date</span>'}</div>
+            <div class="ix-d">${badge(item.domain||'FGW')} ${badge(item.priority||'medium')} ${item.date?`<span style="font-size:11px;color:var(--hint);margin-left:3px">${item.date}</span>`:'<span style="font-size:11px;color:var(--red);margin-left:3px">no date</span>'}</div>
           </div>
           <div class="ix-acts">
             <button class="ix-btn" onclick="toggleInboxEdit('${item.id}')" title="Edit">✏️</button>
@@ -647,7 +945,7 @@ function renderRightPanel(){
             <button class="ix-btn" onclick="removeInbox('${item.id}')" title="Drop">×</button>
           </div>
         </div>
-        <div id="iedit_${item.id}" style="display:none;background:var(--s2);border-radius:var(--r);padding:10px;display:none;flex-direction:column;gap:6px">
+        <div class="ix-edit" id="iedit_${item.id}">
           <textarea id="itxt_${item.id}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--surface);color:var(--text);resize:vertical;outline:none;min-height:52px">${item.text}</textarea>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
             <select id="idom_${item.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:12px;background:var(--s2);color:var(--text);outline:none">
@@ -672,7 +970,7 @@ function renderRightPanel(){
     <div class="psec">
       <div class="ptitle">Improve Intelligence</div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:7px">Tell me what I'm getting wrong. I'll learn from it.</div>
-      <textarea class="fb-area" id="fb-inp" placeholder="e.g. You keep flagging Joe's updates as Bucket 1. Those are just status updates..."></textarea>
+      <textarea class="fb-area" id="fb-inp" placeholder="e.g. You keep flagging Joe's updates as Bucket 1..."></textarea>
       <div class="btn-row">
         <button class="btn btn-p" style="font-size:12px" onclick="submitFeedback()">Submit feedback</button>
       </div>
@@ -681,21 +979,15 @@ function renderRightPanel(){
 }
 
 function renderCustomers(){
-  const custs=S.custDetail ? null : S.customers;
   if(S.custDetail){
     const c=S.customers.find(x=>x.id===S.custDetail); if(!c){ set({custDetail:null}); return renderCustomers(); }
     return `<div style="padding:18px 22px">
       <button class="btn" style="margin-bottom:14px;font-size:12px" onclick="set({custDetail:null})">← Back</button>
       <div style="display:flex;align-items:center;gap:11px;margin-bottom:18px">
         <div class="av" style="width:44px;height:44px;font-size:15px">${initials(c.name)}</div>
-        <div><div style="font-size:17px;font-weight:500">${c.name}</div><div style="font-size:13px;color:var(--muted)">${c.company||''} ${c.email?'· '+c.email:''}</div></div>
+        <div><div style="font-size:17px;font-weight:500">${c.name||''}</div><div style="font-size:13px;color:var(--muted)">${c.company||''} ${c.email?'· '+c.email:''}</div></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:16px">
-        <div class="sc"><div class="sv">${(c.calls||[]).length}</div><div class="sl">calls logged</div></div>
-        <div class="sc"><div class="sv">${(c.notes||[]).length}</div><div class="sl">notes</div></div>
-      </div>
-      ${(c.calls||[]).length?`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Call History</div>${c.calls.map(call=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:3px"><span>${call.date||''}</span></div>${call.summary?`<div style="font-size:13px">${call.summary}</div>`:''}</div>`).join('')}</div>`:''}
-      ${(c.notes||[]).length?`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Notes</div>${c.notes.map(n=>`<div style="background:var(--s2);border-radius:6px;padding:8px 10px;font-size:13px;margin-bottom:5px">${n.text}</div>`).join('')}</div>`:''}
+      ${c.notes?`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Notes</div><div style="background:var(--s2);border-radius:6px;padding:8px 10px;font-size:13px">${c.notes}</div></div>`:''}
       <div><div style="font-size:11px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px">Add Note</div>
         <textarea class="fb-area" id="cust-note" placeholder="Add a note..."></textarea>
         <div class="btn-row"><button class="btn btn-p" style="font-size:12px" onclick="addCustNote('${c.id}')">Save note</button></div>
@@ -703,14 +995,14 @@ function renderCustomers(){
     </div>`;
   }
   return `<div style="padding:14px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-    <div><div style="font-size:15px;font-weight:500">Customer Records</div><div style="font-size:12px;color:var(--muted);margin-top:1px">${S.customers.length} contacts · built from email threads</div></div>
+    <div><div style="font-size:15px;font-weight:500">Customer Records</div><div style="font-size:12px;color:var(--muted);margin-top:1px">${S.customers.length} contacts · synced from Supabase</div></div>
     <button class="btn btn-p" style="font-size:12px" onclick="showAddCust()">+ Add</button>
   </div>
   <div style="padding:0 22px"><input type="text" class="add-inp" id="cust-search" placeholder="Search..." oninput="renderCustList(this.value)" style="margin:10px 0"></div>
   <div id="cust-list" style="padding:0 22px">
     ${S.customers.length?S.customers.map(c=>`<div class="cust-row" onclick="set({custDetail:'${c.id}'})">
       <div class="av">${initials(c.name)}</div>
-      <div style="flex:1"><div class="cname">${c.name}</div><div class="cmeta">${c.company||c.email||''}</div><div class="clast">${c.type?badge(c.type):''}${c.lastContact?' · '+timeAgo(c.lastContact):''}</div></div>
+      <div style="flex:1"><div class="cname">${c.name||''}</div><div class="cmeta">${c.company||c.email||''}</div><div class="clast">${c.type?badge(c.type):''} ${c.last_seen?'· '+timeAgo(c.last_seen):''}</div></div>
     </div>`).join(''):'<div class="empty">No contacts yet. Run a briefing to start building your contact list.</div>'}
   </div>`;
 }
@@ -718,12 +1010,12 @@ function renderCustomers(){
 function renderSettings(){
   return `<div class="settings-wrap">
     <div style="font-size:16px;font-weight:500;margin-bottom:3px">Settings</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Configure API connections and preferences</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:22px">Configure API connections</div>
 
     <div class="set-block">
       <div class="set-lbl">Claude API Key</div>
-      <div class="set-sub">From console.anthropic.com. Stored locally in your browser only. Never shared except with the Claude API directly.</div>
-      <input type="password" class="set-inp" id="key-inp" placeholder="sk-ant-api03-..." value="${CFG.key?'••••••••••••••••':''}">
+      <div class="set-sub">From console.anthropic.com. Stored locally in your browser only — never sent anywhere except the Claude API.</div>
+      <input type="password" class="set-inp" id="key-inp" placeholder="sk-ant-api03-..." value="${CFG.key?'••••••••••••••••••••':''}">
       <div class="btn-row">
         <button class="btn btn-p" style="font-size:12px" onclick="saveKey()">Save API key</button>
         ${CFG.key?'<span style="font-size:12px;color:var(--green);padding:6px 0">✓ Key configured</span>':''}
@@ -732,7 +1024,7 @@ function renderSettings(){
 
     <div class="set-block">
       <div class="set-lbl">Google Apps Script URL</div>
-      <div class="set-sub">Deploy the Code.gs file from this project as a Google Apps Script Web App. Paste the URL here. This connects to your Gmail and Calendar natively — no API costs.</div>
+      <div class="set-sub">Deploy the Code.gs file as a Web App. This connects to your Gmail and Calendar.</div>
       <input type="text" class="set-inp" id="url-inp" placeholder="https://script.google.com/macros/s/..." value="${CFG.url||''}">
       <div class="btn-row">
         <button class="btn btn-p" style="font-size:12px" onclick="saveUrl()">Save URL</button>
@@ -743,21 +1035,21 @@ function renderSettings(){
     </div>
 
     <div class="set-block">
-      <div class="set-lbl">This page's URL (for Stream Deck)</div>
-      <div class="set-sub">Set a Stream Deck "Open" button to this URL to open the Command Center in a dedicated window.</div>
-      <div class="url-display">${window.location.href}</div>
+      <div class="set-lbl">Supabase</div>
+      <div class="set-sub">Connected to project FGW Command Center. All tasks, inbox items, contacts, leads, call logs, and EOD records are stored here.</div>
+      <div class="url-display">${SB_URL}</div>
+      <div style="margin-top:8px"><span class="sync-badge ok">✓ Connected</span></div>
     </div>
 
     <div class="set-block">
-      <div class="set-lbl">Setup Guide</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.8">
-        <div style="margin-bottom:6px"><strong style="color:var(--text)">1.</strong> Get Claude API key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue)">console.anthropic.com</a></div>
-        <div style="margin-bottom:6px"><strong style="color:var(--text)">2.</strong> Open <a href="https://script.google.com" target="_blank" style="color:var(--blue)">script.google.com</a> → your "Personal Assistant" project</div>
-        <div style="margin-bottom:6px"><strong style="color:var(--text)">3.</strong> Replace Code.gs with the Apps Script code (from the README in your GitHub repo)</div>
-        <div style="margin-bottom:6px"><strong style="color:var(--text)">4.</strong> Run setupSheets() once to initialize</div>
-        <div style="margin-bottom:6px"><strong style="color:var(--text)">5.</strong> Deploy → Web App → Execute as Me → Anyone can access</div>
-        <div><strong style="color:var(--text)">6.</strong> Copy the web app URL and paste above</div>
-      </div>
+      <div class="set-lbl">Setup code for new machines</div>
+      <div class="set-sub">Open the dashboard on any machine, paste this in the browser console (Cmd+Option+J), hit Enter.</div>
+      <div class="url-display">localStorage.setItem('fgw_key','YOUR_CLAUDE_KEY');\nlocalStorage.setItem('fgw_url','${CFG.url||'YOUR_APPS_SCRIPT_URL'}');</div>
+    </div>
+
+    <div class="set-block">
+      <div class="set-lbl">This page's URL</div>
+      <div class="url-display">${window.location.href}</div>
     </div>
   </div>`;
 }
@@ -772,9 +1064,6 @@ function renderDashboard(){
   `;
 }
 
-// ============================================================
-// MAIN RENDER
-// ============================================================
 function render(){
   const shell = document.getElementById('shell');
   if(!shell) return;
@@ -793,9 +1082,9 @@ function render(){
   bindPhotoInput();
 }
 
-// ============================================================
-// EVENT HANDLERS (global functions called from HTML)
-// ============================================================
+// ================================================================
+// EVENT HANDLERS
+// ================================================================
 function setNav(n){ set({nav:n,custDetail:null}); }
 function setTab(t){ set({tab:t}); }
 
@@ -803,10 +1092,10 @@ async function addBlock(btn, encoded){
   const b = JSON.parse(decodeURIComponent(encoded));
   btn.textContent='Adding...'; btn.disabled=true;
   try{
-    const d = await fetchAppsScript('createEvent', {event:{summary:b.label,description:b.description,duration:b.duration||30}});
+    const d = await fetchAppsScript('createEvent',{event:{summary:b.label,description:b.description,duration:b.duration||30}});
     if(d?.status==='created'){ btn.textContent='✓ Added'; btn.className='cadd added'; }
     else throw new Error('Failed');
-  }catch(e){ btn.textContent='+Calendar'; btn.disabled=false; toast('Add to calendar: '+e.message,true); }
+  }catch(e){ btn.textContent='+Cal'; btn.disabled=false; toast('Add to calendar: '+e.message,true); }
 }
 
 async function processDumpBtn(){
@@ -815,21 +1104,24 @@ async function processDumpBtn(){
   if(btn){btn.textContent='Processing...';btn.disabled=true;}
   try{
     if(CFG.url) await fetchAppsScript('saveBrainDump',{text,source:'brain dump',timestamp:new Date().toISOString()});
-    const items = await processDump(text);
-    items.forEach(item=>addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,priority:item.priority||'medium',source:'brain dump'}));
+    const result = await callAppsScriptGET({action:'processDump',key:CFG.key,text});
+    if(result.error) throw new Error(result.error);
+    const items = result.items||[];
+    for(const item of items) await addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,priority:item.priority||'medium',source:'brain dump'});
     if(document.getElementById('dump-inp')) document.getElementById('dump-inp').value='';
     toast(`${items.length} items added to inbox`);
   }catch(e){ toast('Error: '+e.message,true); }
   finally{ if(btn){btn.textContent='Process →';btn.disabled=false;} }
 }
 
-function addManualTask(){
+async function addManualTask(){
   const t=document.getElementById('add-task-inp')?.value?.trim(); if(!t)return;
   const domain=document.getElementById('add-domain')?.value||'FGW';
   const date=document.getElementById('add-date')?.value||null;
-  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:t,meta:date?`Due ${date}`:'Added manually',domain,est:'15m',done:false,eodStatus:null,date}];
-  set({tasks});
+  const newTask = {id:'t_'+Date.now(),bucket:1,title:t,meta:date?`Due ${date}`:'Added manually',domain,est:'15m',priority:'medium',done:false,eodStatus:null,dueDate:date,gmailLink:'',threadId:'',source:'manual'};
+  set({tasks:[...S.tasks,newTask]});
   if(document.getElementById('add-task-inp')) document.getElementById('add-task-inp').value='';
+  await dbSaveTask(newTask);
   toast('Task added');
 }
 
@@ -837,64 +1129,54 @@ async function quickCapture(){
   const text=document.getElementById('quick-cap-inp')?.value?.trim(); if(!text)return;
   const domain=document.getElementById('quick-domain')?.value||'FGW';
   const priority=document.getElementById('quick-priority')?.value||'medium';
-  // Add to local tasks immediately
-  const tasks=[...S.tasks,{id:'t_'+Date.now(),bucket:1,title:text,meta:`${domain} · ${priority} priority`,domain,est:'15m',done:false,eodStatus:null}];
-  set({tasks});
+  const newTask = {id:'t_'+Date.now(),bucket:1,title:text,meta:`${domain} · ${priority} priority`,domain,est:'15m',priority,done:false,eodStatus:null,dueDate:null,gmailLink:'',threadId:'',source:'quick-capture'};
+  set({tasks:[...S.tasks,newTask]});
   if(document.getElementById('quick-cap-inp')) document.getElementById('quick-cap-inp').value='';
-  toast('Captured — will appear in tomorrow\'s briefing');
-  // Also save to Google Sheet via Apps Script for persistence
-  try{ await callAppsScriptGET({action:'addTodo',text,domain,priority}); }catch(e){}
+  await dbSaveTask(newTask);
+  // Also save to Apps Script todos for nightly pickup
+  if(CFG.url) callAppsScriptGET({action:'addTodo',text,domain,priority}).catch(()=>{});
+  toast('Captured');
 }
 
-function removeInbox(id){ set({inbox:S.inbox.map(i=>i.id===id?{...i,status:'removed'}:i)}); }
-
-function toggleInboxEdit(id){
-  const el = document.getElementById('iedit_'+id);
-  if(!el) return;
-  const showing = el.style.display === 'flex';
-  el.style.display = showing ? 'none' : 'flex';
-}
-
-function saveInboxEdit(id){
-  const text = document.getElementById('itxt_'+id)?.value?.trim();
-  const domain = document.getElementById('idom_'+id)?.value;
-  const priority = document.getElementById('ipri_'+id)?.value;
-  const date = document.getElementById('idate_'+id)?.value;
-  if(!text) return;
-  // Update the inbox item with edited values
-  const inbox = S.inbox.map(i => i.id===id ? {...i, text, domain, priority, date: date||null} : i);
-  set({inbox});
-  // Now approve it
-  approveInbox(id);
-}
 function approveAllDated(){ S.inbox.filter(i=>i.status==='pending'&&i.date).forEach(i=>approveInbox(i.id)); toast('Approved all dated items'); }
 
-function submitFeedback(){
+async function submitFeedback(){
   const text=document.getElementById('fb-inp')?.value?.trim(); if(!text)return;
-  set({feedback:[...S.feedback,{id:'f_'+Date.now(),text,created:new Date().toISOString(),applied:false}]});
-  if(document.getElementById('fb-inp')) document.getElementById('fb-inp').value='';
-  toast('Feedback saved — applied to next briefing');
+  try {
+    await sb.insert('feedback', {text});
+    if(document.getElementById('fb-inp')) document.getElementById('fb-inp').value='';
+    toast('Feedback saved — applied to next briefing');
+  } catch(e) { toast('Error saving feedback',true); }
 }
 
-function addCustNote(id){
+async function addCustNote(id){
   const text=document.getElementById('cust-note')?.value?.trim(); if(!text)return;
-  const customers=S.customers.map(c=>c.id===id?{...c,notes:[...(c.notes||[]),{text,date:new Date().toISOString()}]}:c);
-  set({customers});
-  toast('Note saved');
+  const c = S.customers.find(x=>x.id===id); if(!c)return;
+  const newNotes = (c.notes||'')+'\n'+new Date().toLocaleDateString()+': '+text;
+  try {
+    await sb.update('contacts', id, {notes: newNotes.trim()});
+    const customers=S.customers.map(x=>x.id===id?{...x,notes:newNotes.trim()}:x);
+    set({customers});
+    toast('Note saved');
+  } catch(e) { toast('Error saving note',true); }
 }
 
 function renderCustList(q=''){
   const list=document.getElementById('cust-list'); if(!list)return;
   const filtered=S.customers.filter(c=>[c.name,c.company,c.email].filter(Boolean).join(' ').toLowerCase().includes(q.toLowerCase()));
-  list.innerHTML=filtered.length?filtered.map(c=>`<div class="cust-row" onclick="set({custDetail:'${c.id}'})"><div class="av">${initials(c.name)}</div><div style="flex:1"><div class="cname">${c.name}</div><div class="cmeta">${c.company||c.email||''}</div></div></div>`).join(''):'<div class="empty">No matches</div>';
+  list.innerHTML=filtered.length?filtered.map(c=>`<div class="cust-row" onclick="set({custDetail:'${c.id}'})"><div class="av">${initials(c.name)}</div><div style="flex:1"><div class="cname">${c.name||''}</div><div class="cmeta">${c.company||c.email||''}</div></div></div>`).join(''):'<div class="empty">No matches</div>';
 }
 
-function showAddCust(){
+async function showAddCust(){
   const name=prompt('Customer name:'); if(!name)return;
   const email=prompt('Email (optional):');
   const company=prompt('Company (optional):');
-  const customers=[...S.customers,{id:'c_'+Date.now(),name,email:email||'',company:company||'',type:'Unknown',created:new Date().toISOString(),lastContact:new Date().toISOString(),calls:[],notes:[]}];
-  set({customers});
+  try {
+    const rows = await sb.insert('contacts', {email:email||'noemail_'+Date.now()+'@unknown.com',name,company:company||'',type:'client'});
+    const newContact = rows[0];
+    set({customers:[...S.customers, newContact]});
+    toast('Contact added');
+  } catch(e) { toast('Error: '+e.message,true); }
 }
 
 function saveKey(){
@@ -923,144 +1205,45 @@ function bindPhotoInput(){
     const status=document.getElementById('ph-status'); if(status)status.textContent='Reading handwriting...';
     try{
       const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
-      const items=await processImage(b64,file.type);
-      items.forEach(item=>addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,source:'handwritten note',priority:item.priority||'medium'}));
+      const result=await callAppsScriptGET({action:'processImage',key:CFG.key,b64,mime:file.type});
+      const items=result.items||[];
+      for(const item of items) await addInbox({text:item.text,domain:item.domain||'FGW',date:item.hasDate?item.dateText:null,source:'handwritten note',priority:item.priority||'medium'});
       if(status)status.textContent=`${items.length} items extracted`;
       setTimeout(()=>{if(status)status.textContent='';},3000);
     }catch(e){if(status)status.textContent='Error: '+e.message;}
   });
 }
 
-// ============================================================
-// THREAD DETAIL DRAWER
-// ============================================================
-async function showThreadDetail(threadId, titleEncoded) {
-  if (!CFG.url) { toast('Apps Script URL not set', true); return; }
-  if (!CFG.key) { toast('Claude API key not set', true); return; }
-
-  const title = decodeURIComponent(titleEncoded);
-
-  // Show drawer with loading state
-  let drawer = document.getElementById('thread-drawer');
-  if (!drawer) {
-    drawer = document.createElement('div');
-    drawer.id = 'thread-drawer';
-    drawer.style.cssText = 'position:fixed;top:0;right:0;width:520px;max-width:95vw;height:100vh;background:var(--surface);border-left:1px solid var(--border);z-index:500;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,0.12);transform:translateX(100%);transition:transform 0.2s ease';
-    document.body.appendChild(drawer);
-  }
-
-  drawer.innerHTML = `
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;background:var(--surface)">
-      <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:500;line-height:1.4;margin-bottom:2px">${title}</div>
-        <div style="font-size:11px;color:var(--muted)" id="drawer-subtitle">Analyzing thread...</div>
-      </div>
-      <button onclick="closeThreadDetail()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--muted);padding:0 0 0 14px;flex-shrink:0;line-height:1">×</button>
-    </div>
-    <div style="flex:1;overflow-y:auto" id="drawer-body">
-      <div style="padding:32px 20px;text-align:center">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:8px">Reading thread & generating summary...</div>
-        <div style="width:180px;height:2px;background:var(--border);border-radius:2px;margin:0 auto;overflow:hidden">
-          <div style="height:100%;background:var(--text);border-radius:2px;animation:lf 2s ease infinite alternate"></div>
-        </div>
-      </div>
-    </div>
-  `;
-  drawer.style.transform = 'translateX(0)';
-
-  let backdrop = document.getElementById('drawer-backdrop');
-  if (!backdrop) {
-    backdrop = document.createElement('div');
-    backdrop.id = 'drawer-backdrop';
-    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.2);z-index:499';
-    backdrop.onclick = closeThreadDetail;
-    document.body.appendChild(backdrop);
-  }
-  backdrop.style.display = 'block';
-
-  try {
-    // Fetch raw thread data from Apps Script
-    const result = await callAppsScriptGET({ action: 'getThreadDetail', threadId });
-    if (result.error) throw new Error(result.error);
-
-    const history = result.history || [];
-    let gmailLink = result.leadInfo?.gmailLink || `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
-
-    // Route through Apps Script — direct Anthropic API calls are blocked by CORS from GitHub Pages
-    const aiResult = await callAppsScriptGET({ action: 'summarizeThread', key: CFG.key, threadId, subject: title });
-    if (aiResult.error) throw new Error(aiResult.error);
-    const summary = aiResult.summary;
-    if (aiResult.gmailLink) gmailLink = aiResult.gmailLink;
-
-    // Render the AI summary + raw thread toggle
-    const drawerBody = document.getElementById('drawer-body');
-    const subtitle = document.getElementById('drawer-subtitle');
-
-    if (subtitle) subtitle.innerHTML = `${result.messageCount} messages · <a href="${gmailLink}" target="_blank" style="color:var(--blue);text-decoration:none">Open in Gmail ↗</a>`;
-
-    // Convert markdown bold to HTML
-    const formatted = summary
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/^- /gm, '• ')
-      .split('\n').map(line => `<p style="margin:0 0 6px">${line}</p>`).join('');
-
-    drawerBody.innerHTML = `
-      <div style="padding:18px 20px 0">
-        <div style="font-size:13px;line-height:1.75;color:var(--text)">${formatted}</div>
-      </div>
-      <div style="padding:14px 20px;border-top:1px solid var(--border);margin-top:14px">
-        <button onclick="toggleRawThread('${threadId}')" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:0">
-          Show full thread ↓
-        </button>
-      </div>
-      <div id="raw-thread-${threadId}" style="display:none;padding:0 20px 20px">
-        ${history.map(msg => {
-          const fromName = msg.from.replace(/<.+>/,'').trim().replace(/"/g,'');
-          return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)">
-            <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-              <span style="font-size:12px;font-weight:500;color:${msg.isInternal?'var(--blue)':'var(--text)'}">${fromName}</span>
-              <span style="font-size:11px;color:var(--hint);font-family:var(--mono)">${msg.dateFormatted}</span>
-            </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.6;white-space:pre-wrap">${msg.body}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    `;
-
-  } catch(e) {
-    const drawerBody = document.getElementById('drawer-body');
-    if (drawerBody) drawerBody.innerHTML = `<div style="color:var(--red);padding:20px;font-size:13px">Error: ${e.message}</div>`;
-  }
-}
-
-function toggleRawThread(threadId) {
-  const el = document.getElementById('raw-thread-' + threadId);
-  const btn = el?.previousElementSibling?.querySelector('button');
-  if (!el) return;
-  const showing = el.style.display !== 'none';
-  el.style.display = showing ? 'none' : 'block';
-  if (btn) btn.textContent = showing ? 'Show full thread ↓' : 'Hide full thread ↑';
-}
-
-function closeThreadDetail() {
-  const drawer = document.getElementById('thread-drawer');
-  const backdrop = document.getElementById('drawer-backdrop');
-  if (drawer) drawer.style.transform = 'translateX(100%)';
-  if (backdrop) backdrop.style.display = 'none';
-}
+// ================================================================
+// CLOCK
+// ================================================================
 setInterval(()=>{
   const c=document.getElementById('clk-display'); if(c)c.textContent=fmtTime();
   const h=document.getElementById('hdr-time'); if(h)h.textContent=fmtTime();
 },30000);
 
-// ============================================================
-// INIT
-// ============================================================
+// ================================================================
+// INIT — load from Supabase on startup
+// ================================================================
 async function init(){
+  // Load weather immediately
   const wx=await fetchWeather();
   S.weather=wx;
 
-  // Check for today's stored briefing
+  // Load state from Supabase (source of truth)
+  try {
+    const state = await dbLoadState();
+    S.tasks = state.tasks;
+    S.inbox = state.inbox;
+    S.customers = state.contacts;
+  } catch(e) {
+    console.error('Failed to load from Supabase:', e.message);
+    // Fall back to localStorage session cache
+    S.tasks = JSON.parse(localStorage.getItem('fgw_tasks')||'[]');
+    S.inbox = JSON.parse(localStorage.getItem('fgw_inbox')||'[]');
+  }
+
+  // Check for today's briefing in localStorage (session cache)
   const storedDate=localStorage.getItem('fgw_briefing_date');
   if(storedDate===new Date().toDateString()){
     const stored=localStorage.getItem('fgw_briefing');

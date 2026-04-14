@@ -687,13 +687,19 @@ async function showSummary(threadId, title){
   }
 }
 
-function toggleRaw(id){
-  const el=document.getElementById(id); if(!el)return;
-  const showing = el.style.display!=='none';
-  el.style.display=showing?'none':'block';
-  const btn=el.previousElementSibling?.querySelector('button');
-  if(btn) btn.textContent=showing?'Show full thread ↓':'Hide full thread ↑';
+async function updateLeadStage(threadId, stage){
+  if (!threadId || threadId === 'undefined') return;
+  try {
+    await sb.update('leads', threadId, {stage}, 'thread_id');
+    if (CFG.url) callAppsScriptGET({action:'updateLeadStage', threadId, stage}).catch(()=>{});
+    toast(`Stage updated: ${stage}`);
+    if (S.briefing?.leads) {
+      S.briefing.leads = S.briefing.leads.map(l => l.threadId===threadId ? {...l, stage} : l);
+      render();
+    }
+  } catch(e) { toast('Error updating stage: '+e.message, true); }
 }
+
 
 function closeDrawer(){
   document.getElementById('thread-drawer').classList.remove('open');
@@ -743,6 +749,7 @@ function renderHeader(){
 }
 
 function renderTask(t){
+  const dueBadge = t.dueDate ? `<span style="font-size:11px;color:${isPastDue(t.dueDate)?'var(--red)':'var(--hint)'};font-family:var(--mono);margin-left:4px">${formatDueDate(t.dueDate)}</span>` : '';
   return `<div class="tr ${t.done?'done':''} fade" data-id="${t.id}">
     <div class="chk ${t.done?'ck':''}" onclick="toggleTask('${t.id}')"></div>
     <div class="tb2">
@@ -751,10 +758,123 @@ function renderTask(t){
       <div class="task-links">
         ${t.gmailLink?`<a href="${t.gmailLink}" target="_blank" class="task-link">↗ Gmail</a>`:''}
         ${t.threadId?`<button class="task-link" onclick="showSummary('${t.threadId}','${encodeURIComponent(t.title)}')">📋 Summary</button>`:''}
+        <button class="task-link" onclick="openTaskEdit('${t.id}')">✏️ Edit</button>
       </div>
     </div>
-    <div class="tr-r"><span class="est">${t.est||'15m'}</span>${badge(t.domain||'FGW')}</div>
+    <div class="tr-r">
+      ${dueBadge}
+      <span class="est">${t.est||'15m'}</span>
+      ${badge(t.domain||'FGW')}
+    </div>
   </div>`;
+}
+
+function isPastDue(dateStr){
+  if(!dateStr || dateStr==='TBD') return false;
+  return new Date(dateStr) < new Date(new Date().toDateString());
+}
+
+function formatDueDate(dateStr){
+  if(!dateStr || dateStr==='TBD') return 'TBD';
+  const d = new Date(dateStr);
+  const today = new Date(new Date().toDateString());
+  const diff = Math.round((d - today) / 86400000);
+  if(diff === 0) return 'Today';
+  if(diff === 1) return 'Tomorrow';
+  if(diff === -1) return 'Yesterday';
+  if(diff < 0) return `${Math.abs(diff)}d overdue`;
+  if(diff <= 7) return `${diff}d`;
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+
+function openTaskEdit(id){
+  const t = S.tasks.find(x=>x.id===id);
+  if(!t) return;
+  document.getElementById('drawer-title').textContent = 'Edit Task';
+  document.getElementById('drawer-subtitle').textContent = '';
+  document.getElementById('thread-drawer').classList.add('open');
+  document.getElementById('drawer-backdrop').classList.add('show');
+
+  const domains = ['FGW','Strategic','BendFlow','Verrité','Jump Box','Wedding','Personal','Finance','Legal','Ops'];
+  const ests = ['5m','10m','15m','20m','30m','45m','60m','90m','2h'];
+  const priorities = ['high','medium','low'];
+  const buckets = [{v:1,l:'Bucket 1 — Yours to Own'},{v:2,l:'Bucket 2 — Weigh In'},{v:3,l:'Ops / Awareness'}];
+
+  document.getElementById('drawer-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Task</div>
+        <textarea id="et-title" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);resize:vertical;outline:none;min-height:60px">${t.title}</textarea>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Notes / Context</div>
+        <textarea id="et-meta" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);resize:vertical;outline:none;min-height:52px">${t.meta||''}</textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Due Date</div>
+          <input type="date" id="et-date" value="${t.dueDate&&t.dueDate!=='TBD'?t.dueDate:''}" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Priority</div>
+          <select id="et-priority" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none">
+            ${priorities.map(p=>`<option${t.priority===p?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Domain</div>
+          <select id="et-domain" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none">
+            ${domains.map(d=>`<option${(t.domain||'FGW')===d?' selected':''}>${d}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Est. Time</div>
+          <select id="et-est" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none">
+            ${ests.map(e=>`<option${(t.est||'15m')===e?' selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.05em">Bucket</div>
+        <select id="et-bucket" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;background:var(--s2);color:var(--text);outline:none">
+          ${buckets.map(b=>`<option value="${b.v}"${t.bucket===b.v?' selected':''}>${b.l}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;padding-top:4px">
+        <button onclick="saveTaskEdit('${id}')" style="flex:1;padding:9px;background:var(--text);color:#fff;border:none;border-radius:var(--r);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer">Save</button>
+        <button onclick="closeDrawer()" style="padding:9px 14px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-family:var(--font);font-size:13px;cursor:pointer;color:var(--muted)">Cancel</button>
+        <button onclick="deleteTask('${id}')" style="padding:9px 14px;background:var(--red-bg);border:1px solid var(--red);border-radius:var(--r);font-family:var(--font);font-size:13px;cursor:pointer;color:var(--red)">Delete</button>
+      </div>
+    </div>`;
+}
+
+async function saveTaskEdit(id){
+  const title = document.getElementById('et-title')?.value?.trim();
+  if(!title){ toast('Title required',true); return; }
+  const meta = document.getElementById('et-meta')?.value?.trim();
+  const dueDate = document.getElementById('et-date')?.value || null;
+  const priority = document.getElementById('et-priority')?.value || 'medium';
+  const domain = document.getElementById('et-domain')?.value || 'FGW';
+  const est = document.getElementById('et-est')?.value || '15m';
+  const bucket = parseInt(document.getElementById('et-bucket')?.value) || 1;
+
+  const updated = S.tasks.map(t => t.id===id ? {...t, title, meta, dueDate, priority, domain, est, bucket} : t);
+  set({tasks: updated});
+  const task = updated.find(t=>t.id===id);
+  await dbSaveTask(task);
+  closeDrawer();
+  toast('Task saved');
+}
+
+async function deleteTask(id){
+  if(!confirm('Delete this task?')) return;
+  const tasks = S.tasks.filter(t=>t.id!==id);
+  set({tasks});
+  try { await sb.delete('tasks', id); } catch(e){}
+  closeDrawer();
+  toast('Task deleted');
 }
 
 function renderBucket(title, tasks){
@@ -781,17 +901,25 @@ function renderFocusBlocks(blocks){
 
 function renderLeads(leads){
   if(!leads?.length)return'';
+  const stages = ['Fresh','Quoted','Negotiating','Approved','In Production','Shipping/Invoicing','Stale','Closed'];
   return `<div class="sec"><div class="sh"><div class="st">Lead Tracker</div></div>
-    ${leads.map(l=>`<div class="lead-row">
-      <div style="flex:1">
-        <div class="ln">${l.name}</div>
-        <div class="lm">${l.notes||''}</div>
-        ${l.gmailLink?`<a href="${l.gmailLink}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">↗ Open thread</a>`:''}
-      </div>
-      <div class="lr">
-        ${badge(l.stage,'stage')}
-        ${l.value&&l.value!=='$0'?`<div style="font-size:11px;color:var(--green);font-weight:500;margin-top:2px">${l.value}</div>`:''}
-        <div class="ld">${l.owner} · ${l.daysOpen}d</div>
+    ${leads.map(l=>`<div class="lead-row" style="flex-direction:column;align-items:stretch;gap:5px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:9px">
+        <div style="flex:1">
+          <div class="ln">${l.name}</div>
+          <div class="lm">${l.notes||''}</div>
+          <div style="display:flex;gap:8px;margin-top:3px;align-items:center">
+            ${l.gmailLink?`<a href="${l.gmailLink}" target="_blank" style="font-size:11px;color:var(--blue);text-decoration:none">↗ Gmail</a>`:''}
+            ${l.threadId?`<button class="task-link" onclick="showSummary('${l.threadId}','${encodeURIComponent(l.name)}')">📋 Summary</button>`:''}
+          </div>
+        </div>
+        <div class="lr">
+          <select onchange="updateLeadStage('${l.threadId}',this.value)" style="font-size:11px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--s2);color:var(--text);font-family:var(--font);cursor:pointer;outline:none">
+            ${stages.map(s=>`<option${s===l.stage?' selected':''}>${s}</option>`).join('')}
+          </select>
+          ${l.value&&l.value!=='$0'?`<div style="font-size:11px;color:var(--green);font-weight:500;margin-top:3px">${l.value}</div>`:''}
+          <div class="ld">${l.owner} · ${l.daysOpen}d</div>
+        </div>
       </div>
     </div>`).join('')}
   </div>`;

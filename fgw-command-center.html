@@ -893,9 +893,11 @@ async function deleteTask(id){
 
 function renderBucket(title, tasks){
   const rem=tasks.filter(t=>!t.done).length;
+  // Done tasks sink to bottom
+  const sorted = [...tasks.filter(t=>!t.done), ...tasks.filter(t=>t.done)];
   return `<div class="sec">
     <div class="sh"><div class="st">${title}</div><div class="sc2">${rem} remaining</div></div>
-    ${tasks.length?tasks.map(renderTask).join(''):'<div class="empty">Nothing here</div>'}
+    ${sorted.length?sorted.map(renderTask).join(''):'<div class="empty">Nothing here</div>'}
   </div>`;
 }
 
@@ -979,7 +981,7 @@ function renderMorningTab(){
   if(f==='done') tasks = tasks.filter(t=>t.done);
   else if(f==='remaining') tasks = tasks.filter(t=>!t.done);
   else if(f==='overdue') tasks = tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate!=='TBD'&&isPastDue(t.dueDate));
-  else tasks = tasks.filter(t=>!t.done); // default: hide done
+  // default: show all — done tasks stay visible with strikethrough
 
   const b1=tasks.filter(t=>t.bucket===1), b2=tasks.filter(t=>t.bucket===2), b3=tasks.filter(t=>t.bucket===3);
 

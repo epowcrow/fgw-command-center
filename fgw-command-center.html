@@ -299,6 +299,7 @@ const S = {
   briefing: null, tasks: [], inbox: [], customers: [],
   calEvents: [], weather: null, loading: false,
   dateQueue: [], eodNotes: '', custDetail: null,
+  taskFilter: null, // null | 'done' | 'remaining' | 'overdue' | 'stale'
   syncStatus: 'ok' // ok | syncing | error
 };
 
@@ -369,9 +370,9 @@ async function dbSaveEOD(notes, done, carry, dropped, tasks) {
 
 async function dbLoadState() {
   try {
-    // Load tasks (open + recent done from today)
+    // Load tasks — open tasks + today's done tasks only (previous days' done tasks are hidden)
     const today = new Date().toISOString().split('T')[0];
-    const tasks = await sb.select('tasks', `status=neq.dropped&order=created_at.asc`);
+    const tasks = await sb.select('tasks', `or=(status.eq.open,and(status.eq.done,updated_at.gte.${today}T00:00:00))&order=created_at.asc`);
     const inbox = await sb.select('inbox_items', `status=eq.pending&order=created_at.desc`, {limit: 50});
     const contacts = await sb.select('contacts', '', {order: 'last_seen.desc', limit: 200});
 
@@ -731,19 +732,32 @@ function renderHeader(){
   const done=S.tasks.filter(t=>t.done).length, total=S.tasks.length, rem=total-done;
   const pct=total>0?Math.round(done/total*100):0;
   const stale=(S.briefing?.leads||[]).filter(l=>l.stage==='Stale').length;
+  const overdue=S.tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate!=='TBD'&&isPastDue(t.dueDate)).length;
   const emins=estMins(S.tasks);
+  const f = S.taskFilter;
   return `<div class="hdr">
     <div class="hdr-top">
       <div><div class="hdr-date">${fmtDate()}</div><div class="hdr-sub">Flickinger Glassworks · Red Hook, Brooklyn</div></div>
       <div class="hdr-r"><div class="hdr-time" id="hdr-time">${fmtTime()}</div><div class="hdr-wx">${S.weather?.display||'Red Hook, Brooklyn'}</div></div>
     </div>
     <div class="stats">
-      <div class="sc"><div class="sv">${done}</div><div class="sl">done</div></div>
-      <div class="sc"><div class="sv">${rem}</div><div class="sl">remaining</div></div>
-      <div class="sc"><div class="sv">${fmtMins(emins)}</div><div class="sl">est. time left</div></div>
-      <div class="sc"><div class="sv" style="${stale>0?'color:var(--red)':''}">${stale}</div><div class="sl">stale leads</div></div>
+      <div class="sc" onclick="setFilter('done')" style="cursor:pointer;${f==='done'?'background:var(--green-bg);outline:2px solid var(--green)':''}">
+        <div class="sv" style="color:var(--green)">${done}</div><div class="sl">done today</div>
+      </div>
+      <div class="sc" onclick="setFilter('remaining')" style="cursor:pointer;${f==='remaining'?'background:var(--blue-bg);outline:2px solid var(--blue)':''}">
+        <div class="sv">${rem}</div><div class="sl">remaining</div>
+      </div>
+      <div class="sc" onclick="setFilter('overdue')" style="cursor:pointer;${f==='overdue'?'background:var(--red-bg);outline:2px solid var(--red)':''}">
+        <div class="sv" style="${overdue>0?'color:var(--red)':''}">${overdue}</div><div class="sl">overdue</div>
+      </div>
+      <div class="sc" onclick="setFilter('stale')" style="cursor:pointer;${f==='stale'?'background:var(--amber-bg);outline:2px solid var(--amber)':''}">
+        <div class="sv" style="${stale>0?'color:var(--amber)':''}">${stale}</div><div class="sl">stale leads</div>
+      </div>
     </div>
-    <div class="prog-lbl"><span>${done} of ${total} tasks complete</span><span>${pct}%</span></div>
+    <div class="prog-lbl">
+      <span>${f?`Filtered: ${f} <button onclick="setFilter(null)" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;margin-left:4px">✕ clear</button>`:done+' of '+total+' tasks complete'}</span>
+      <span>${pct}%</span>
+    </div>
     <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
   </div>`;
 }
@@ -899,11 +913,13 @@ function renderFocusBlocks(blocks){
   </div>`;
 }
 
-function renderLeads(leads){
+function renderLeads(leads, highlightStale=false){
   if(!leads?.length)return'';
   const stages = ['Fresh','Quoted','Negotiating','Approved','In Production','Shipping/Invoicing','Stale','Closed'];
-  return `<div class="sec"><div class="sh"><div class="st">Lead Tracker</div></div>
-    ${leads.map(l=>`<div class="lead-row" style="flex-direction:column;align-items:stretch;gap:5px">
+  const displayLeads = highlightStale ? leads.filter(l=>l.stage==='Stale') : leads;
+  if(!displayLeads.length) return highlightStale ? `<div class="sec"><div class="sh"><div class="st">Stale Leads</div></div><div class="empty">No stale leads</div></div>` : '';
+  return `<div class="sec" id="lead-tracker-section"><div class="sh"><div class="st">${highlightStale?'⚠️ Stale Leads':'Lead Tracker'}</div><div class="sc2">${displayLeads.length} leads</div></div>
+    ${displayLeads.map(l=>`<div class="lead-row" style="flex-direction:column;align-items:stretch;gap:5px;${highlightStale?'background:var(--amber-bg);border-radius:var(--r);padding:8px;margin-bottom:4px':''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:9px">
         <div style="flex:1">
           <div class="ln">${l.name}</div>
@@ -956,16 +972,33 @@ function renderEmpty(){
 function renderMorningTab(){
   const b=S.briefing;
   if(!b) return renderEmpty();
-  const b1=S.tasks.filter(t=>t.bucket===1), b2=S.tasks.filter(t=>t.bucket===2), b3=S.tasks.filter(t=>t.bucket===3);
+
+  // Apply task filter
+  let tasks = S.tasks;
+  const f = S.taskFilter;
+  if(f==='done') tasks = tasks.filter(t=>t.done);
+  else if(f==='remaining') tasks = tasks.filter(t=>!t.done);
+  else if(f==='overdue') tasks = tasks.filter(t=>!t.done&&t.dueDate&&t.dueDate!=='TBD'&&isPastDue(t.dueDate));
+  else tasks = tasks.filter(t=>!t.done); // default: hide done
+
+  const b1=tasks.filter(t=>t.bucket===1), b2=tasks.filter(t=>t.bucket===2), b3=tasks.filter(t=>t.bucket===3);
+
+  // Stale filter — jump to leads section highlighted
+  const staleHighlight = f==='stale';
+
   return `
     ${b.briefing?`<div class="brief-txt">${b.briefing}</div>`:''}
-    ${renderBucket('Bucket 1 — Yours to Own',b1)}
-    ${renderBucket('Bucket 2 — Weigh In Needed',b2)}
-    ${renderBucket('Operations — Delegate or Verify',b3)}
-    ${renderFocusBlocks(b.focusBlocks)}
-    ${renderLeads(b.leads)}
-    ${renderCalls(b.missedCalls)}
-    ${renderCalEvents()}
+    ${f?`<div style="padding:8px 20px;background:var(--amber-bg);font-size:12px;color:var(--amber);display:flex;justify-content:space-between;align-items:center">
+      <span>Filtering: <strong>${f}</strong></span>
+      <button onclick="setFilter(null)" style="font-size:11px;color:var(--amber);background:none;border:none;cursor:pointer;font-family:var(--font)">✕ Clear filter</button>
+    </div>`:''}
+    ${f==='stale'?'':renderBucket('Bucket 1 — Yours to Own',b1)}
+    ${f==='stale'?'':renderBucket('Bucket 2 — Weigh In Needed',b2)}
+    ${f==='stale'?'':renderBucket('Operations — Delegate or Verify',b3)}
+    ${f==='stale'?'':renderFocusBlocks(b.focusBlocks)}
+    ${renderLeads(b.leads, staleHighlight)}
+    ${f==='stale'?'':renderCalls(b.missedCalls)}
+    ${f==='stale'?'':renderCalEvents()}
   `;
 }
 
@@ -1222,6 +1255,8 @@ function render(){
 // ================================================================
 // EVENT HANDLERS
 // ================================================================
+function setFilter(f){ set({taskFilter: S.taskFilter===f ? null : f}); }
+
 function setNav(n){ set({nav:n,custDetail:null}); }
 function setTab(t){ set({tab:t}); }
 

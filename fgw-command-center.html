@@ -508,9 +508,18 @@ async function runBriefing(){
       ...(briefing.bucket3||[]).map(t=>({...t,bucket:3,done:false,eodStatus:null})),
     ].filter(t => !existingIds.has(t.id));
 
+    // Preserve manually added tasks that aren't done or dropped
+    const manualSources = new Set(['manual','quick-capture','inbox']);
+    const manualTasks = S.tasks.filter(t =>
+      manualSources.has(t.source) && !t.done && t.eodStatus !== 'drop'
+    );
+
     // Carry over tasks from previous EOD
     const prevCarry = S.tasks.filter(t=>t.eodStatus==='carry').map(t=>({...t,eodStatus:null,meta:'(carried over) '+(t.meta||'')}));
-    const mergedTasks = [...prevCarry, ...newTasks];
+
+    // Merge: carry-overs + manual tasks + new briefing tasks (no duplicates)
+    const allPreservedIds = new Set([...prevCarry.map(t=>t.id), ...manualTasks.map(t=>t.id)]);
+    const mergedTasks = [...prevCarry, ...manualTasks, ...newTasks.filter(t=>!allPreservedIds.has(t.id))];
 
     set({briefing, tasks:mergedTasks, loading:false, tab:'morning'});
 
